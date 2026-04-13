@@ -1,0 +1,3 @@
+"""
+Alerts Service module.
+"""
