@@ -1,0 +1,6 @@
+# ── CV — Détection chute + émotion (Dockerfile.cv) ──────────────────────────
+# Python 3.11-slim + libs système : libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6
+-r base.txt
+
+opencv-python==4.10.0.84
+mediapipe==0.10.18

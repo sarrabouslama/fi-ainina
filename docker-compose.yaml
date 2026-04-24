@@ -1,0 +1,116 @@
+version: "3.9"
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: elderlink_api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./api:/app/api
+      - ./shared:/app/shared
+      - logs_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - elderlink_net
+
+  llm:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.llm
+    container_name: elderlink_llm
+    env_file:
+      - .env
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
+      - logs_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - elderlink_net
+
+  cv:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cv
+    container_name: elderlink_cv
+    env_file:
+      - .env
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
+      - logs_data:/app/logs
+    restart: unless-stopped
+    networks:
+      - elderlink_net
+
+#  voice:
+#    build:
+#      context: .
+#      dockerfile: docker/Dockerfile.voice
+#    container_name: elderlink_voice
+#    env_file:
+#      - .env
+#    volumes:
+#      - ./services:/app/services
+#      - ./shared:/app/shared
+#      - logs_data:/app/logs
+#    restart: unless-stopped
+#    networks:
+#      - elderlink_net
+
+  alerts:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.alerts
+    container_name: elderlink_alerts
+    env_file:
+      - .env
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
+      - logs_data:/app/logs
+    depends_on:
+      - llm
+      - cv
+    restart: unless-stopped
+    networks:
+      - elderlink_net
+
+  db:
+    image: postgres:15-alpine
+    container_name: elderlink_db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-elderlink}
+      POSTGRES_USER: ${POSTGRES_USER:-elder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - elderlink_net
+
+volumes:
+  pg_data:
+  logs_data:
+
+networks:
+  elderlink_net:
+    driver: bridge

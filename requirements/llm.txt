@@ -1,0 +1,11 @@
+# ── LLM — Chat + mémoire + alertes (Dockerfile.llm) ─────────────────────────
+# Python 3.11-slim
+-r base.txt
+
+openai==1.54.5
+langchain==0.3.8
+langchain-openai==0.2.8
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+aiosmtplib==3.0.2
+requests==2.32.3

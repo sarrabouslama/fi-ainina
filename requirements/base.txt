@@ -1,0 +1,8 @@
+# ── Base — partagé par tous les modules ─────────────────────────────────────
+# Python 3.11 | à installer dans chaque conteneur via COPY requirements/base.txt
+
+pydantic==2.7.4
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+python-json-logger==2.0.7
+numpy==1.24.3

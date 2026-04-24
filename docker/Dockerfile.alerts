@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app 
+
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/devops.txt requirements/devops.txt
+RUN pip install --no-cache-dir -r requirements/devops.txt
+
+COPY services/ ./services/
+COPY shared/ ./shared/
+
+CMD ["python", "-m", "services.alerts.main"]

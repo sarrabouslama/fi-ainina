@@ -1,0 +1,7 @@
+# ── Voice — STT (Whisper) + TTS (Coqui) (Dockerfile.voice) ──────────────────
+# Python 3.11-slim + libs système : ffmpeg portaudio19-dev
+-r base.txt
+faster-whisper==1.0.0
+TTS==0.22.0
+pyaudio==0.2.14
+soundfile==0.12.1

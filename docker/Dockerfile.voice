@@ -1,0 +1,27 @@
+from python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libportaudio2 \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavfilter-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+ 
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/voice.txt requirements/voice.txt
+RUN pip install --no-cache-dir -r requirements/voice.txt
+
+COPY services/ ./services/
+COPY shared/ ./shared/
+
+CMD ["python", "-m", "services.voice.main"]

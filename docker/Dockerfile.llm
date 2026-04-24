@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/llm.txt requirements/llm.txt
+RUN pip install --no-cache-dir -r requirements/llm.txt
+
+COPY services/ ./services/
+COPY shared/ ./shared/
+
+CMD ["python", "-m", "services.llm.main"]
