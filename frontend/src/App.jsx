@@ -12,7 +12,7 @@ function App() {
         {/* TODO P3 frontend: add routes */}
         {/* <Route path="/technician" element={<technicianDashboard />} /> */}
         {/* <Route path="/user" element={<UserDashboard />} /> */}
-        <Route path="*" element={<div style={{padding:32}}>ElderCare AI — Frontend placeholder</div>} />
+        <Route path="*" element={<div style={{ padding: 32 }}>FiAinina AI — Frontend placeholder</div>} />
       </Routes>
     </BrowserRouter>
   )

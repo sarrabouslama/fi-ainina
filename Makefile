@@ -1,5 +1,5 @@
 # ============================================================
-# ElderCare AI — Makefile
+# FiAinina AI — Makefile
 # Usage: make <target>
 # ============================================================
 
@@ -7,7 +7,7 @@
 
 help:
 	@echo ""
-	@echo "ElderCare AI — Available commands:"
+	@echo "FiAinina AI — Available commands:"
 	@echo "  make setup      Copy .env.example → .env (first time)"
 	@echo "  make up         Start all services"
 	@echo "  make down       Stop all services"

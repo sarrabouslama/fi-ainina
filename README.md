@@ -1,4 +1,4 @@
-# ElderCare AI — Microservices Platform
+# FiAinina AI — Microservices Platform
 
 AI-powered elderly care assistant with fall detection, voice companion, emotion monitoring, and family alerts.
 

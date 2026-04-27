@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="ElderCare Alert Service", version="1.0.0")
+app = FastAPI(title="FiAinina Alert Service", version="1.0.0")
 
 @app.get("/health")
 def health():

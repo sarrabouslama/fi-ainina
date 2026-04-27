@@ -6,7 +6,7 @@ services:
   # ─────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: eldercare_postgres
+    container_name: fi_ainina_postgres
     restart: unless-stopped
     env_file: .env
     environment:
@@ -19,7 +19,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - eldercare_net
+      - fi_ainina_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -28,7 +28,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: eldercare_redis
+    container_name: fi_ainina_redis
     restart: unless-stopped
     command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
@@ -37,7 +37,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - eldercare_net
+      - fi_ainina_net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -46,7 +46,7 @@ services:
 
   nginx:
     build: ./nginx
-    container_name: eldercare_nginx
+    container_name: fi_ainina_nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -58,14 +58,14 @@ services:
       - emotion_service
       - alert_service
     networks:
-      - eldercare_net
+      - fi_ainina_net
 
   # ─────────────────────────────────────────
   # P1 — LLM & Conversation
   # ─────────────────────────────────────────
   llm_service:
     build: ./services/llm_service
-    container_name: eldercare_llm
+    container_name: fi_ainina_llm
     restart: unless-stopped
     env_file:
       - .env
@@ -78,7 +78,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./services/llm_service/app:/app/app
 
@@ -87,7 +87,7 @@ services:
   # ─────────────────────────────────────────
   voice_service:
     build: ./services/voice_service
-    container_name: eldercare_voice
+    container_name: fi_ainina_voice
     restart: unless-stopped
     env_file:
       - .env
@@ -100,7 +100,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./services/voice_service/app:/app/app
     devices:
@@ -111,7 +111,7 @@ services:
   # ─────────────────────────────────────────
   fall_detection_service:
     build: ./services/fall_detection_service
-    container_name: eldercare_fall
+    container_name: fi_ainina_fall
     restart: unless-stopped
     env_file:
       - .env
@@ -122,7 +122,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./services/fall_detection_service/app:/app/app
       - fall_clips:/app/clips           # Video clip storage
@@ -136,7 +136,7 @@ services:
   # ─────────────────────────────────────────
   emotion_service:
     build: ./services/emotion_service
-    container_name: eldercare_emotion
+    container_name: fi_ainina_emotion
     restart: unless-stopped
     env_file:
       - .env
@@ -147,7 +147,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./services/emotion_service/app:/app/app
     devices:
@@ -158,7 +158,7 @@ services:
   # ─────────────────────────────────────────
   alert_service:
     build: ./services/alert_service
-    container_name: eldercare_alert
+    container_name: fi_ainina_alert
     restart: unless-stopped
     env_file:
       - .env
@@ -171,7 +171,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./services/alert_service/app:/app/app
       - fall_clips:/app/clips:ro        # Read clips written by P3
@@ -181,12 +181,12 @@ services:
   # ─────────────────────────────────────────
   frontend:
     build: ./frontend
-    container_name: eldercare_frontend
+    container_name: fi_ainina_frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     networks:
-      - eldercare_net
+      - fi_ainina_net
     volumes:
       - ./frontend/src:/app/src         # Hot reload in dev
 
@@ -195,26 +195,26 @@ services:
   # ─────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
-    container_name: eldercare_prometheus
+    container_name: fi_ainina_prometheus
     restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
     networks:
-      - eldercare_net
+      - fi_ainina_net
     profiles: ["monitoring"]
 
   grafana:
     image: grafana/grafana:latest
-    container_name: eldercare_grafana
+    container_name: fi_ainina_grafana
     restart: unless-stopped
     ports:
       - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
-      - eldercare_net
+      - fi_ainina_net
     profiles: ["monitoring"]
 
 # ─────────────────────────────────────────
@@ -227,5 +227,5 @@ volumes:
   grafana_data:
 
 networks:
-  eldercare_net:
+  fi_ainina_net:
     driver: bridge

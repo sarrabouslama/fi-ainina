@@ -1,5 +1,5 @@
 -- ============================================================
--- ElderCare AI — PostgreSQL initialization
+-- FiAinina AI — PostgreSQL initialization
 -- Run once on first container start
 --
 -- Soft delete convention (applies to ALL tables):
@@ -180,6 +180,6 @@ CREATE INDEX IF NOT EXISTS idx_person_watchers_active
 -- ─── Seed: default developer account ────────────────────────
 -- Password: "admin123" (bcrypt hash — change in production!)
 INSERT INTO users (name, email, role, password_hash) VALUES
-  ('Admin Developer', 'admin@eldercare.local', 'developer',
+  ('Admin Developer', 'admin@fiainina.local', 'developer',
    '$2b$12$LQv3c1yqBwEHFr3HGDoMjuG6P6Z.B0j.zN9Mq5KpjPEZGt.TTGQTC')
 ON CONFLICT (email) DO NOTHING;
