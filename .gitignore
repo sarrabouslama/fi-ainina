@@ -1,42 +1,44 @@
+# ============================================================
+# ElderCare AI — .gitignore
+# ============================================================
+
+# Environment files — NEVER commit these
+.env
+services/**/.env
+frontend/.env
+
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
+*.so
 .Python
+.venv/
+venv/
+services/**/.venv/
+env/
 *.egg-info/
 dist/
 build/
-.eggs/
-*.egg
-.venv/
-venv/
-env/
-
-# Environment
-.env
-*.local
-
-# Testing / coverage
 .pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
 .mypy_cache/
-.ruff_cache/
+*.pyc
 
-# Node / frontend
+# Node / Frontend
 node_modules/
 frontend/dist/
 frontend/.vite/
-*.tsbuildinfo
-
-# Database
-*.db
-*.sqlite3
+*.log
+npm-debug.log*
 
 # Docker
-docker-compose.override.yml
+*.pid
+
+# Video clips & large files
+*.mp4
+*.avi
+*.mkv
+clips/
 
 # IDE
 .vscode/
@@ -44,14 +46,17 @@ docker-compose.override.yml
 *.swp
 *.swo
 .DS_Store
-Thumbs.db
 
 # Logs
-*.log
 logs/
+*.log
 
-# Models / large files
+# Models (too large for git)
 *.pt
+*.pth
 *.onnx
-*.bin
-*.h5
+*.pkl
+models/
+
+# OS
+Thumbs.db

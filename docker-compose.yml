@@ -1,0 +1,231 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: eldercare_postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - eldercare_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: eldercare_redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    ports:
+      - "6379:6379"
+    networks:
+      - eldercare_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    build: ./nginx
+    container_name: eldercare_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend
+      - llm_service
+      - voice_service
+      - fall_detection_service
+      - emotion_service
+      - alert_service
+    networks:
+      - eldercare_net
+
+  # ─────────────────────────────────────────
+  # P1 — LLM & Conversation
+  # ─────────────────────────────────────────
+  llm_service:
+    build: ./services/llm_service
+    container_name: eldercare_llm
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./services/llm_service/.env
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eldercare_net
+    volumes:
+      - ./services/llm_service/app:/app/app
+
+  # ─────────────────────────────────────────
+  # P2 — Voice & Long-Term Memory
+  # ─────────────────────────────────────────
+  voice_service:
+    build: ./services/voice_service
+    container_name: eldercare_voice
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./services/voice_service/.env
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eldercare_net
+    volumes:
+      - ./services/voice_service/app:/app/app
+    devices:
+      - /dev/snd:/dev/snd   # Audio access (optional, host-only)
+
+  # ─────────────────────────────────────────
+  # P3 — Fall Detection  ← YOUR SERVICE
+  # ─────────────────────────────────────────
+  fall_detection_service:
+    build: ./services/fall_detection_service
+    container_name: eldercare_fall
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./services/fall_detection_service/.env
+    ports:
+      - "8003:8003"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - eldercare_net
+    volumes:
+      - ./services/fall_detection_service/app:/app/app
+      - fall_clips:/app/clips           # Video clip storage
+    devices:
+      - /dev/video0:/dev/video0         # Webcam access
+    environment:
+      - DISPLAY=${DISPLAY:-:0}          # For local debug with GUI (optional)
+
+  # ─────────────────────────────────────────
+  # P4 — Inactivity & Emotion
+  # ─────────────────────────────────────────
+  emotion_service:
+    build: ./services/emotion_service
+    container_name: eldercare_emotion
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./services/emotion_service/.env
+    ports:
+      - "8004:8004"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - eldercare_net
+    volumes:
+      - ./services/emotion_service/app:/app/app
+    devices:
+      - /dev/video0:/dev/video0
+
+  # ─────────────────────────────────────────
+  # P5 — Integration, Alerts & DevOps
+  # ─────────────────────────────────────────
+  alert_service:
+    build: ./services/alert_service
+    container_name: eldercare_alert
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./services/alert_service/.env
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eldercare_net
+    volumes:
+      - ./services/alert_service/app:/app/app
+      - fall_clips:/app/clips:ro        # Read clips written by P3
+
+  # ─────────────────────────────────────────
+  # FRONTEND
+  # ─────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: eldercare_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - eldercare_net
+    volumes:
+      - ./frontend/src:/app/src         # Hot reload in dev
+
+  # ─────────────────────────────────────────
+  # MONITORING (optional but useful)
+  # ─────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eldercare_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - eldercare_net
+    profiles: ["monitoring"]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: eldercare_grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - eldercare_net
+    profiles: ["monitoring"]
+
+# ─────────────────────────────────────────
+# VOLUMES & NETWORKS
+# ─────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  fall_clips:
+  grafana_data:
+
+networks:
+  eldercare_net:
+    driver: bridge

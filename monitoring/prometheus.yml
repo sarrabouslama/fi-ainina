@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'fall_detection'
+    static_configs:
+      - targets: ['fall_detection_service:8003']
+  - job_name: 'llm_service'
+    static_configs:
+      - targets: ['llm_service:8001']
+  - job_name: 'alert_service'
+    static_configs:
+      - targets: ['alert_service:8005']

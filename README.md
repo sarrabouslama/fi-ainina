@@ -1,34 +1,100 @@
-# AI Companion — Multimodal Safety System for Elderly Assistance
+# ElderCare AI — Microservices Platform
 
-A real-time AI system combining conversational LLM, computer vision, voice interaction, and smart alerting.
+AI-powered elderly care assistant with fall detection, voice companion, emotion monitoring, and family alerts.
 
-## Project structure
+## Team & Services
+
+| Person | Service | Port | Tech |
+|--------|---------|------|------|
+| P1 | `llm_service` — LLM & Conversation | 8001 | OpenAI / Ollama |
+| P2 | `voice_service` — Voice & Memory | 8002 | Whisper, TTS, PostgreSQL |
+| P3 | `fall_detection_service` — Fall Detection | 8003 | MediaPipe, OpenCV |
+| P4 | `emotion_service` — Inactivity & Emotion | 8004 | DeepFace, OpenCV |
+| P5 | `alert_service` — Alerts & DevOps | 8005 | SMTP, Twilio, Docker |
+
+## Quick Start
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/sarrabouslama/fi-ainina.git
+cd fi-ainina
+
+# 2. Setup environment files
+make setup
+
+# 3. Edit .env with your values (DB password, API keys, etc.)
+nano .env
+
+# 4. Start everything
+make up
+
+# 5. Check services are running
+make ps
+```
+
+## Per-developer workflow
+
+Each person only needs to start their service + infrastructure:
+
+```bash
+# P3 workflow
+make up-infra          # start postgres + redis
+make up-p3             # start fall_detection_service
+make logs-p3           # follow logs
+make test-p3           # run unit tests
+```
+
+## Service URLs (local)
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| API Gateway | http://localhost:80 |
+| P1 LLM | http://localhost:8001/docs |
+| P2 Voice | http://localhost:8002/docs |
+| P3 Fall | http://localhost:8003/docs |
+| P4 Emotion | http://localhost:8004/docs |
+| P5 Alerts | http://localhost:8005/docs |
+| PostgreSQL | localhost:5432 |
+| Redis | localhost:6379 |
+
+## Redis Event Contract
+
+Services communicate via Redis Pub/Sub. **Do not change these channel names without coordinating with the team.**
+
+| Channel | Producer | Consumer | Payload |
+|---------|----------|----------|---------|
+| `fall_events` | P3 | P5 | `FallEventPayload` (see P3 schemas.py) |
+| `emotion_events` | P4 | P5 | emotion + person_id |
+| `inactivity_events` | P4 | P5 | duration + person_id |
+| `alerts` | P5 | Frontend WS | alert notification |
+
+## Project Structure
 
 ```
-services/   business logic — one package per module (llm, cv, voice, alerts)
-api/        FastAPI routers and middleware — no business logic here
-shared/     shared config, logger, constants
-frontend/   React + vite dashboard
-tests/      mirrors services/ — unit + integration
-docker/     one Dockerfile per service
-.github/    CI/CD workflows
+fi-ainina/
+├── docker-compose.yml       # Orchestration 
+├── .env.example             # Root env template
+├── Makefile                 # Dev shortcuts
+└── infra/
+    ├── nginx/             # API Gateway
+    ├── postgres/init.sql  # DB schema
+    ├── redis/redis.conf
+├── monitoring/              # Prometheus + Grafana
+├── frontend/                # React dashboard (shared)
+└── services/
+    ├── llm_service/         
+    ├── voice_service/       
+    ├── fall_detection_service/  
+    ├── emotion_service/     
+    └── alert_service/       
 ```
-## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| LLM | Ollama + LangChain |
-| Computer Vision | MediaPipe + DeepFace + OpenCV |
-| Voice | Whisper (STT) + Coqui TTS |
-| Backend | Python 3.11 + FastAPI |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Database | PostgreSQL 16 + SQLAlchemy + Alembic |
-| DevOps | Docker Compose + GitHub Actions |
 
-## Environment variables
+**Branch naming convention:** `feature/description`
 
-See `.env.example` for all required variables.
+## Environment Variables
 
-## Methodology
-
-CRISP-DM phases mapped to Agile Epics — see `docs/crisp-dm.md`.
+- Root `.env` — shared infra config (DB, Redis URLs, JWT secret)
+- `services/*/. env` — service-specific config (API keys, thresholds)
+- `frontend/.env` — frontend URLs
