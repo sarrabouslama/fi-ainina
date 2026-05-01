@@ -1,5 +1,5 @@
 # ============================================================
-# FiAinina AI — Makefile
+# FiAinina AI — Makefile for Windows
 # Usage: make <target>
 # ============================================================
 
@@ -18,17 +18,20 @@ help:
 	@echo "  make clean      Remove volumes and containers"
 	@echo ""
 	@echo "Per-service:"
-	@echo "  make up-p3      Start only fall_detection_service + deps"
-	@echo "  make logs-p3    Follow logs of fall_detection_service"
-	@echo "  make test-p3    Run P3 unit tests"
+	@echo "  make up-p5      Start alert_service + deps"
+	@echo "  make logs-p5    Follow logs of alert_service"
 	@echo ""
 
 setup:
-	@if [ ! -f .env ]; then cp .env.example .env; echo "✓ .env created — fill in your values"; else echo "✓ .env already exists"; fi
-	@for svc in llm_service voice_service fall_detection_service emotion_service alert_service; do \
-		if [ ! -f services/$$svc/.env ]; then cp services/$$svc/.env.example services/$$svc/.env; echo "✓ services/$$svc/.env created"; fi; \
-	done
-	@if [ ! -f frontend/.env ]; then cp frontend/.env.example frontend/.env; echo "✓ frontend/.env created"; fi
+	@echo "Setting up environment..."
+	@if not exist .env copy .env.example .env
+	@if not exist services\llm_service\.env copy services\llm_service\.env.example services\llm_service\.env
+	@if not exist services\voice_service\.env copy services\voice_service\.env.example services\voice_service\.env
+	@if not exist services\fall_detection_service\.env copy services\fall_detection_service\.env.example services\fall_detection_service\.env
+	@if not exist services\emotion_service\.env copy services\emotion_service\.env.example services\emotion_service\.env
+	@if not exist services\alert_service\.env copy services\alert_service\.env.example services\alert_service\.env
+	@if not exist frontend\.env copy frontend\.env.example frontend\.env
+	@echo "✓ Setup complete! Edit .env files with your credentials."
 
 up:
 	docker compose up -d
