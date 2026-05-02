@@ -43,7 +43,7 @@ class TestCooldownManager:
         """First alert for a (user, event_type) pair should always be allowed."""
         mock_redis.get.return_value = None  # No previous alert
         
-        result = cooldown_manager.can_send_alert("user_001", "fall_detected")
+        result = await cooldown_manager.can_send_alert("user_001", "fall_detected")
         
         assert result is True
         mock_redis.get.assert_called_once()
@@ -55,7 +55,7 @@ class TestCooldownManager:
         one_minute_ago = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
         mock_redis.get.return_value = one_minute_ago.encode('utf-8')
         
-        result = cooldown_manager.can_send_alert("user_001", "fall_detected")
+        result = await cooldown_manager.can_send_alert("user_001", "fall_detected")
         
         assert result is False
 
@@ -66,14 +66,14 @@ class TestCooldownManager:
         six_minutes_ago = (datetime.utcnow() - timedelta(minutes=6)).isoformat()
         mock_redis.get.return_value = six_minutes_ago.encode('utf-8')
         
-        result = cooldown_manager.can_send_alert("user_001", "fall_detected")
+        result = await cooldown_manager.can_send_alert("user_001", "fall_detected")
         
         assert result is True
 
     @pytest.mark.asyncio
     async def test_record_alert_sent(self, cooldown_manager, mock_redis):
         """Recording alert should set Redis key with TTL."""
-        cooldown_manager.record_alert_sent("user_001", "fall_detected")
+        await cooldown_manager.record_alert_sent("user_001", "fall_detected")
         
         mock_redis.setex.assert_called_once()
         call_args = mock_redis.setex.call_args
@@ -228,7 +228,7 @@ class TestEmailHandler:
         
         assert handler.enabled is not None
         assert handler.smtp_host is not None
-        assert handler.smtp_port == 587 or handler.smtp_port == 25
+        assert handler.smtp_port in {25, 465, 587, 2525}
 
     @pytest.mark.asyncio
     async def test_compose_email_structure(self):
@@ -304,6 +304,14 @@ class TestSMSHandler:
         event.event_type = "emotion_distress"
         message = handler._compose_sms(event)
         assert "😢" in message  # Emotion emoji
+
+    def test_whatsapp_recipient_format(self):
+        """WhatsApp recipients should be prefixed for Twilio."""
+        handler = SMSHandler()
+        handler.channel = "whatsapp"
+
+        assert handler._format_recipient("+21696278425") == "whatsapp:+21696278425"
+        assert handler._format_recipient("whatsapp:+21696278425") == "whatsapp:+21696278425"
 
 
 # ─────────────────────────────────────────────────────────────

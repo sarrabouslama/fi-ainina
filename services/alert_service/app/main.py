@@ -80,7 +80,7 @@ async def handle_alert(event: AlertEvent):
     logger.info(f"Processing alert: {event.event_type} from {event.user_id} (severity: {event.severity})")
     
     # Step 1: Check cooldown
-    if not cooldown_manager.can_send_alert(event.user_id, event.event_type):
+    if not await cooldown_manager.can_send_alert(event.user_id, event.event_type):
         logger.debug(f"Alert skipped due to cooldown: {event.event_type}/{event.user_id}")
         return
     
@@ -110,12 +110,24 @@ async def handle_alert(event: AlertEvent):
     
     # Email (to family members)
     email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] == "family"]
+    if not email_recipients and config.ALERT_TEST_EMAIL_RECIPIENTS:
+        logger.info("Using ALERT_TEST_EMAIL_RECIPIENTS fallback for email alert")
+        email_recipients = config.ALERT_TEST_EMAIL_RECIPIENTS
+
     if email_recipients:
         tasks.append(email_handler.send_alert(event, email_recipients))
     
-    # SMS (to caregivers)
+    # SMS / WhatsApp (to caregivers)
     sms_recipients = [r.get("phone") for r in recipients if r.get("phone") and r["role"] in ["caregiver", "admin"]]
     sms_recipients = [r for r in sms_recipients if r]  # Filter None values
+    if (
+        not sms_recipients
+        and config.TWILIO_CHANNEL == "whatsapp"
+        and config.ALERT_TEST_WHATSAPP_RECIPIENTS
+    ):
+        logger.info("Using ALERT_TEST_WHATSAPP_RECIPIENTS fallback for WhatsApp alert")
+        sms_recipients = config.ALERT_TEST_WHATSAPP_RECIPIENTS
+
     if sms_recipients:
         tasks.append(sms_handler.send_alert(event, sms_recipients))
     
@@ -137,12 +149,13 @@ async def handle_alert(event: AlertEvent):
         for recipient in email_recipients:
             await log_alert_to_database(session, event.event_type, "email", recipient, "sent")
         
-        # Log SMS
+        # Log SMS / WhatsApp
+        twilio_channel = sms_handler.channel_name
         for recipient in sms_recipients:
-            await log_alert_to_database(session, event.event_type, "sms", recipient, "sent")
+            await log_alert_to_database(session, event.event_type, twilio_channel, recipient, "sent")
     
     # Step 6: Record cooldown
-    cooldown_manager.record_alert_sent(event.user_id, event.event_type)
+    await cooldown_manager.record_alert_sent(event.user_id, event.event_type)
     
     logger.info(f"Alert processed successfully: {event.event_type}/{event.user_id}")
 

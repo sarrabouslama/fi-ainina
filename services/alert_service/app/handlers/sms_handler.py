@@ -1,7 +1,5 @@
 """
-SMS Handler : send alert notifications via Twilio.
-
-Uses Twilio SDK for SMS sending.
+Twilio Handler : send alert notifications via SMS or WhatsApp.
 """
 
 import logging
@@ -15,12 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 class SMSHandler:
-    """Send alert SMS via Twilio."""
+    """Send alert messages via Twilio SMS or WhatsApp."""
 
     def __init__(self):
         self.twilio_sid = config.TWILIO_SID
         self.twilio_token = config.TWILIO_TOKEN
-        self.twilio_from = config.TWILIO_FROM
+        self.channel = config.TWILIO_CHANNEL
+        self.twilio_from = (
+            config.TWILIO_WHATSAPP_FROM
+            if self.channel == "whatsapp"
+            else config.TWILIO_FROM
+        )
         self.enabled = config.ENABLE_SMS
         
         if self.enabled and self.twilio_sid and self.twilio_token:
@@ -28,19 +31,25 @@ class SMSHandler:
         else:
             self.client = None
 
+    @property
+    def channel_name(self) -> str:
+        return "whatsapp" if self.channel == "whatsapp" else "sms"
+
     async def send_alert(self, event: AlertEvent, recipients: List[str]) -> bool:
         """
-        Send alert SMS to recipients.
+        Send alert message to recipients.
         
         Args:
             event: The alert event
-            recipients: List of phone numbers (E.164 format, e.g., +33612345678)
+            recipients: List of phone numbers.
+                SMS format: +33612345678
+                WhatsApp format: +33612345678 or whatsapp:+33612345678
             
         Returns:
-            True if all SMS sent successfully, False otherwise
+            True if all messages sent successfully, False otherwise
         """
         if not self.enabled:
-            logger.info("SMS sending disabled, skipping")
+            logger.info("Twilio sending disabled, skipping")
             return True
 
         if not self.client:
@@ -48,7 +57,7 @@ class SMSHandler:
             return False
 
         if not recipients:
-            logger.warning(f"No SMS recipients for alert {event.event_type}")
+            logger.warning(f"No {self.channel_name} recipients for alert {event.event_type}")
             return False
 
         # Format message
@@ -56,28 +65,36 @@ class SMSHandler:
         success_count = 0
 
         for recipient in recipients:
+            formatted_recipient = self._format_recipient(recipient)
             try:
                 msg = self.client.messages.create(
                     body=message_text,
                     from_=self.twilio_from,
-                    to=recipient
+                    to=formatted_recipient
                 )
-                logger.info(f"SMS sent to {recipient} (SID: {msg.sid})")
+                logger.info(f"{self.channel_name.upper()} sent to {formatted_recipient} (SID: {msg.sid})")
                 success_count += 1
             except Exception as e:
-                logger.error(f"Failed to send SMS to {recipient}: {e}", exc_info=True)
+                logger.error(f"Failed to send {self.channel_name} to {formatted_recipient}: {e}", exc_info=True)
 
         if success_count == len(recipients):
-            logger.info(f"All {success_count} SMS sent successfully for {event.event_type}")
+            logger.info(f"All {success_count} {self.channel_name} messages sent successfully for {event.event_type}")
             return True
         else:
             logger.warning(
-                f"Partial SMS failure: {success_count}/{len(recipients)} sent for {event.event_type}"
+                f"Partial {self.channel_name} failure: {success_count}/{len(recipients)} sent for {event.event_type}"
             )
             return success_count > 0
 
+    def _format_recipient(self, recipient: str) -> str:
+        """Format recipient for the configured Twilio channel."""
+        recipient = recipient.strip()
+        if self.channel == "whatsapp" and not recipient.startswith("whatsapp:"):
+            return f"whatsapp:{recipient}"
+        return recipient
+
     def _compose_sms(self, event: AlertEvent) -> str:
-        """Compose SMS message (keep short for SMS constraints)."""
+        """Compose alert message. Kept short so it also works well as SMS."""
         emoji_map = {
             "fall_detected": "🚨",
             "emotion_distress": "😢",

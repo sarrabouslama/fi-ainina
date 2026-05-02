@@ -6,7 +6,6 @@ Uses aiosmtplib for async email sending.
 
 import logging
 from typing import List
-from datetime import datetime
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -26,6 +25,10 @@ class EmailHandler:
         self.smtp_user = config.SMTP_USER
         self.smtp_pass = config.SMTP_PASS
         self.from_name = config.SMTP_FROM_NAME
+        self.from_email = config.SMTP_FROM_EMAIL
+        self.smtp_tls = config.SMTP_TLS
+        self.smtp_ssl = config.SMTP_SSL
+        self.timeout = config.SMTP_TIMEOUT
         self.enabled = config.ENABLE_EMAIL
 
     async def send_alert(self, event: AlertEvent, recipients: List[str]) -> bool:
@@ -52,8 +55,13 @@ class EmailHandler:
             subject, body = self._compose_email(event)
             message = self._create_mime_message(subject, body, recipients)
 
-            # Send via SMTP
-            async with aiosmtplib.SMTP(hostname=self.smtp_host, port=self.smtp_port) as smtp:
+            async with aiosmtplib.SMTP(
+                hostname=self.smtp_host,
+                port=self.smtp_port,
+                use_tls=self.smtp_ssl,
+                start_tls=self.smtp_tls,
+                timeout=self.timeout,
+            ) as smtp:
                 await smtp.login(self.smtp_user, self.smtp_pass)
                 await smtp.send_message(message)
 
@@ -80,6 +88,8 @@ class EmailHandler:
             "emotion_distress": "😢 Détresse émotionnelle",
             "inactivity_detected": "⏱️ Inactivité prolongée"
         }.get(event.event_type, event.event_type)
+
+        confidence = f"{event.confidence * 100:.1f}%" if event.confidence is not None else "N/A"
 
         body = f"""
         <html>
@@ -108,7 +118,7 @@ class EmailHandler:
                             <strong>Date/Heure :</strong> {event.timestamp.strftime('%d/%m/%Y à %H:%M:%S')}
                         </div>
                         <div class="detail">
-                            <strong>Confiance :</strong> {event.confidence*100:.1f}% if event.confidence else 'N/A'
+                            <strong>Confiance :</strong> {confidence}
                         </div>
                         <div class="detail">
                             <strong>Détails :</strong>
@@ -134,7 +144,7 @@ class EmailHandler:
         """Create MIME message."""
         message = MIMEMultipart("alternative")
         message["Subject"] = subject
-        message["From"] = f"{self.from_name} <{self.smtp_user}>"
+        message["From"] = f"{self.from_name} <{self.from_email}>"
         message["To"] = ", ".join(recipients)
 
         # Add HTML body
