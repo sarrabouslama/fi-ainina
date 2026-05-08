@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
 """
-demo.py — Standalone fall detection demo (no FastAPI, no Redis needed).
+debug_demo.py — Fall detection demo with full debugging enabled.
 
 Run from the fall_detection_service directory:
-    python demo.py                      # Use webcam
-    python demo.py path/to/video.mp4    # Test with video file
 
-Controls:
-    Q / ESC  → quit
-    R        → reset confidence engine (clear fall state)
-    S        → print current signal scores to console
-    +/-      → increase / decrease confidence threshold
+    # Test with webcam:
+    python debug_demo.py
+    
+    # Test with video file:
+    python debug_demo.py path/to/video.mp4
+    
+    # Or test a fall video:
+    python debug_demo.py ~/Downloads/fall_test.mov
 
-The window shows:
-  - Live webcam feed with MediaPipe skeleton overlay
-  - HUD with all signal values and a confidence bar
-  - "FALL DETECTED" banner with red overlay when fall is confirmed
+This is like demo.py but with debugging output enabled.
+Watch the console output while the demo runs to see:
+  - Shoulder and hip coordinates
+  - Angle calculations (dx, dy, arctan2, clipping)
+  - Posture decision logic and thresholds applied
 """
 import sys
 import os
 import time
 
+# ── Enable debugging at startup ──────────────────────────────────────────────
+os.environ.setdefault("DEBUG", "true")
+
 # ── Allow running without installing the package ──────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import debug utilities FIRST
+from app.core.debug_utils import enable_debug
+
+# Enable debugging immediately
+enable_debug(True)
 
 import cv2
 
@@ -31,7 +42,6 @@ os.environ.setdefault("CAMERA_INDEX",       "0")
 os.environ.setdefault("CAMERA_WIDTH",       "640")
 os.environ.setdefault("CAMERA_HEIGHT",      "480")
 os.environ.setdefault("CAMERA_FPS",         "30")
-os.environ.setdefault("DEBUG",              "true")
 os.environ.setdefault("REDIS_URL",          "redis://localhost:6379/0")
 # Thresholds — adjust here to tune sensitivity during testing
 os.environ.setdefault("FALL_CONFIDENCE_THRESHOLD",  "0.65")
@@ -45,23 +55,22 @@ from app.core.confidence_engine import confidence_engine
 
 
 def print_help():
-    print("\n" + "="*55)
-    print("  ElderCare — Fall Detection Demo")
-    print("="*55)
+    print("\n" + "="*60)
+    print("  ElderCare — Fall Detection Demo (DEBUG MODE)")
+    print("="*60)
     print("  Q / ESC  quit")
     print("  R        reset fall state")
-    print("  S        print signal scores to console")
+    print("  S        print detailed signal breakdown")
+    print("  D        toggle debug logging on/off")
     print("  +        raise confidence threshold (+0.05)")
     print("  -        lower confidence threshold (−0.05)")
     print(f"\n  Threshold:   {settings.fall_confidence_threshold}")
     print(f"  Persistence: {settings.fall_persistence_seconds}s")
     print(f"  Velocity:    {settings.velocity_threshold}")
-    print("="*55 + "\n")
+    print("="*60 + "\n")
 
 
 def main():
-    print_help()
-
     # Check for video file argument
     video_file = None
     if len(sys.argv) > 1:
@@ -72,6 +81,8 @@ def main():
         print(f"✓  Using video file: {video_file}\n")
     else:
         print(f"✓  Using camera index: {settings.camera_index}\n")
+    
+    print_help()
 
     # ── Open camera or video ────────────────────────────────────────────────────
     ok = video_capture.start(video_file=video_file)
@@ -80,7 +91,7 @@ def main():
             print(f"\n❌  Cannot open video file: {video_file}\n")
         else:
             print(f"\n❌  Cannot open camera index {settings.camera_index}")
-            print("    Try: python demo.py /path/to/video.mp4\n")
+            print("    Try: python debug_demo.py /path/to/video.mp4\n")
         sys.exit(1)
 
     source_str = f"video file '{video_file}'" if video_file else f"camera {settings.camera_index}"
@@ -142,7 +153,7 @@ def main():
                   f"signals={result.confidence.signals}")
 
         # Show window
-        cv2.imshow("ElderCare — Fall Detection Demo  (Q to quit)", display)
+        cv2.imshow("ElderCare — Fall Detection Demo (DEBUG) — Q to quit", display)
 
         # Keyboard
         key = cv2.waitKey(1) & 0xFF
@@ -151,33 +162,46 @@ def main():
         elif key in (ord('r'), ord('R')):
             confidence_engine.reset()
             print("↺  Fall state reset")
+        elif key in (ord('d'), ord('D')):
+            from app.core.debug_utils import is_debug, enable_debug
+            new_state = not is_debug()
+            enable_debug(new_state)
         elif key in (ord('s'), ord('S')):
-            print(f"\n{'='*60}")
+            print(f"\n{'='*75}")
             print(f"  DETAILED SIGNAL DEBUG")
-            print(f"{'='*60}")
-            print(f"  Posture:              {result.posture.upper()}")
-            print(f"  Body angle (primary): {result.body_angle_deg:.1f}° (65+°=standing, 25-65°=ambiguous, ≤25°=lying)")
-            print(f"  Body ratio (tiebreak):{result.body_ratio:.3f} (≥0.8=lying, <0.8=sitting)")
+            print(f"{'='*75}")
+            print(f"  Visibility:           {result.visibility_mode}")
+            print(f"  Landmarks detected:   {bool(result.body_angle_deg or result.body_ratio)}")
+            print(f"")
+            print(f"  ANGLE (Primary Signal):")
+            print(f"    Value:              {result.body_angle_deg:.1f} deg")
+            print(f"    Decision thresholds:")
+            print(f"      >= 65 deg        -> STANDING (upright)")
+            print(f"      25-65 deg        -> AMBIGUOUS (check ratio)")
+            print(f"      <= 25 deg        -> LYING (horizontal)")
+            print(f"")
+            print(f"  RATIO (Tiebreaker Signal):")
+            print(f"    Value:              {result.body_ratio:.3f}")
+            print(f"    Decision threshold:")
+            print(f"      >= 0.8           -> LYING (wide torso)")
+            print(f"      < 0.8            -> SITTING (tall torso)")
+            print(f"")
+            print(f"  FINAL POSTURE:        {result.posture.upper()}")
+            print(f"")
             print(f"  Velocity score:       {result.velocity:.3f}")
             print(f"  Confidence score:     {result.confidence.score:.3f}")
             print(f"  Confidence signals:   {result.confidence.signals}")
-            print(f"  Visibility mode:      {result.visibility_mode}")
             print(f"  Persistence:          {result.confidence.persistence_seconds:.2f}s")
-            print(f"{'='*60}\n")
+            print(f"{'='*75}\n")
         elif key == ord('+'):
             threshold = min(1.0, threshold + 0.05)
-            confidence_engine.update_threshold(threshold)
-            print(f"▲  Threshold → {threshold:.2f}")
         elif key == ord('-'):
-            threshold = max(0.1, threshold - 0.05)
-            confidence_engine.update_threshold(threshold)
-            print(f"▼  Threshold → {threshold:.2f}")
+            threshold = max(0.0, threshold - 0.05)
 
-    # ── Cleanup ───────────────────────────────────────────────────────────────
-    print("\nShutting down…")
-    video_capture.stop()
+    # Cleanup
     cv2.destroyAllWindows()
-    print("Done.")
+    video_capture.stop()
+    print("\n✓  Demo closed")
 
 
 if __name__ == "__main__":

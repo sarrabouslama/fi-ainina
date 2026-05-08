@@ -78,6 +78,36 @@ class PoseResult:
         lm = self.landmarks[idx]
         return lm if lm.is_visible else None
 
+    def get_lenient(self, idx: int, min_visibility: float = 0.1) -> Optional[Landmark]:
+        """
+        Lenient getter for posture calculations — accepts low-visibility landmarks.
+        Use this for angle/VSR calculations where we need hips even if barely visible.
+        
+        Args:
+            idx: landmark index
+            min_visibility: minimum visibility threshold (default 0.1 instead of config's 0.5)
+        
+        Returns:
+            Landmark if visible >= min_visibility, else None
+        """
+        if not self.landmarks or idx >= len(self.landmarks):
+            return None
+        lm = self.landmarks[idx]
+        return lm if lm.visibility >= min_visibility else None
+
+    def midpoint_lenient(self, idx_a: int, idx_b: int, min_visibility: float = 0.1) -> Optional[Landmark]:
+        """Lenient midpoint — accepts low-visibility landmarks for posture calculation."""
+        a = self.get_lenient(idx_a, min_visibility)
+        b = self.get_lenient(idx_b, min_visibility)
+        if a is None or b is None:
+            return None
+        return Landmark(
+            x=(a.x + b.x) / 2,
+            y=(a.y + b.y) / 2,
+            z=(a.z + b.z) / 2,
+            visibility=min(a.visibility, b.visibility),
+        )
+
     def get_any(self, *indices: int) -> Optional[Landmark]:
         """Return first visible landmark from the given list of indices."""
         for idx in indices:

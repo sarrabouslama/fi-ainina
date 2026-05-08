@@ -23,8 +23,6 @@ class VelocityTracker:
     """
 
     def __init__(self, history_seconds: float = 0.5):
-        # Store (timestamp, y_position) tuples
-        # maxlen chosen so we keep ~history_seconds of data at 30 fps
         maxlen = max(5, int(history_seconds * settings.camera_fps))
         self._history: Deque[Tuple[float, float, float]] = deque(maxlen=maxlen)
 
@@ -41,9 +39,16 @@ class VelocityTracker:
 
     def get_velocity(self) -> float:
         """
-        Returns vertical velocity in px/s, normalised by body height.
-        Positive = moving downward (increasing y).
+        Returns vertical velocity in body-heights per second (normalised).
+        Positive = moving downward (increasing y in MediaPipe coords).
         Returns 0.0 when not enough history.
+
+        Fix: use frame_height from pose to convert normalised Δy to pixels,
+        then divide by body height in pixels → scale-independent ratio/s.
+        We approximate frame_height = body_height / typical_body_fraction.
+        Since body_height IS in pixels already (from get_body_height_px),
+        we only need raw Δy (normalised 0-1) × frame_height to get Δy_px.
+        We store body_height_px so we use it as a proxy for frame_height scale.
         """
         if len(self._history) < 2:
             return 0.0
@@ -55,26 +60,40 @@ class VelocityTracker:
         if dt <= 0:
             return 0.0
 
-        # Raw velocity in normalised coords/s
-        raw_velocity = (y1 - y0) / dt   # positive = downward
-
-        # Normalise: convert Δy (normalised) to pixels, then divide by height
-        avg_height = (h0 + h1) / 2
-        if avg_height <= 0:
+        # Average body height in pixels over the window
+        avg_body_h_px = (h0 + h1) / 2.0
+        if avg_body_h_px <= 0:
             return 0.0
 
-        # Δy in pixels = raw_velocity * frame_height / fps … already per-second
-        # Normalised velocity: px/s as fraction of body height
-        frame_h = self._history[-1][2] / max(self._history[-1][2], 1)
-        px_per_second = raw_velocity * self._history[0][2]   # approx
+        # Δy in normalised coords (positive = downward)
+        dy_norm = y1 - y0
 
-        return float(px_per_second)
+        # We need frame height to convert Δy_norm → Δy_px.
+        # MediaPipe y is normalised to [0,1] over frame height, so:
+        #   Δy_px = dy_norm * frame_height_px
+        # We don't store frame_height directly, but body_height_px is a
+        # fraction of it. Use a fixed assumed fraction (body ~70% of frame).
+        # This gives a consistent scale regardless of camera distance.
+        assumed_body_fraction = 0.70
+        estimated_frame_h = avg_body_h_px / assumed_body_fraction
+
+        dy_px = dy_norm * estimated_frame_h          # pixels moved downward
+        velocity_px_per_s = dy_px / dt               # px / s
+
+        # Normalise by body height so result is scale-independent
+        normalised = velocity_px_per_s / avg_body_h_px  # body-heights / s
+
+        # Convert to "px/s equivalent" that settings.velocity_threshold expects.
+        # velocity_threshold default is 200.0 (px/s at reference distance).
+        # Re-scale: multiply by a reference body height (150px typical standing).
+        REFERENCE_BODY_PX = 150.0
+        return float(normalised * REFERENCE_BODY_PX)
 
     def get_velocity_score(self) -> float:
         """
         Returns a 0.0→1.0 score.
-        0.0 = no movement / slow movement
-        1.0 = velocity at or above threshold (fast fall)
+        0.0 = no downward movement
+        1.0 = velocity at or above threshold (fast fall signature)
         """
         v = self.get_velocity()
         if v <= 0:

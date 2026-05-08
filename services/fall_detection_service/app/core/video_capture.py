@@ -34,6 +34,8 @@ class VideoCapture:
     def __init__(self):
         self.cap: Optional[cv2.VideoCapture] = None
         self._frame: Optional[np.ndarray] = None
+        self._is_video_file: bool = False  # True if playing a video file (vs live camera)
+        self._frame_delay_ms: float = 0.0  # Delay between frames for video files
         # Rolling buffer: stores (timestamp, frame) tuples
         # maxlen = fps × pre-roll seconds  → e.g. 30fps × 10s = 300 frames
         self._buffer: deque = deque(
@@ -48,33 +50,53 @@ class VideoCapture:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def start(self) -> bool:
+    def start(self, video_file: Optional[str] = None) -> bool:
         """
-        Open the webcam and start the background reader thread.
-        Returns True if the camera opened successfully.
+        Open a video source (camera or file) and start the background reader thread.
+        
+        Args:
+            video_file: Path to video file. If None, uses camera_index from settings.
+        
+        Returns True if the source opened successfully.
         """
         if self._running:
             logger.warning("VideoCapture already running")
             return True
 
-        logger.info(
-            f"Opening camera index={settings.camera_index} "
-            f"{settings.camera_width}x{settings.camera_height} @ {settings.camera_fps}fps"
-        )
+        if video_file:
+            logger.info(f"Opening video file: {video_file}")
+            self.cap = cv2.VideoCapture(video_file)
+            self._is_video_file = True
+            if not self.cap.isOpened():
+                self._error = f"Cannot open video file: {video_file}"
+                logger.error(self._error)
+                return False
+            
+            # Get FPS from video file and calculate frame delay
+            fps = self.cap.get(cv2.CAP_PROP_FPS)
+            if fps <= 0:
+                fps = 30.0  # Default fallback
+            self._frame_delay_ms = 1000.0 / fps  # Convert to milliseconds
+            logger.info(f"Video FPS: {fps:.1f}, frame delay: {self._frame_delay_ms:.1f}ms")
+        else:
+            logger.info(
+                f"Opening camera index={settings.camera_index} "
+                f"{settings.camera_width}x{settings.camera_height} @ {settings.camera_fps}fps"
+            )
+            self.cap = cv2.VideoCapture(settings.camera_index)
+            self._is_video_file = False
 
-        self.cap = cv2.VideoCapture(settings.camera_index)
+            if not self.cap.isOpened():
+                self._error = f"Cannot open camera index {settings.camera_index}"
+                logger.error(self._error)
+                return False
 
-        if not self.cap.isOpened():
-            self._error = f"Cannot open camera index {settings.camera_index}"
-            logger.error(self._error)
-            return False
-
-        # Apply camera settings
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  settings.camera_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, settings.camera_height)
-        self.cap.set(cv2.CAP_PROP_FPS,          settings.camera_fps)
-        # Reduce buffer so we always get a fresh frame
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            # Apply camera settings (only for camera, not video files)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  settings.camera_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, settings.camera_height)
+            self.cap.set(cv2.CAP_PROP_FPS,          settings.camera_fps)
+            # Reduce buffer so we always get a fresh frame
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self._running = True
         self._thread = threading.Thread(
@@ -167,6 +189,11 @@ class VideoCapture:
                 self._buffer.append((now, frame.copy()))
                 self._last_frame_time = now
                 self._frame_count += 1
+            
+            # For video files, throttle playback to match the video's FPS
+            # For cameras, read as fast as possible
+            if self._is_video_file and self._frame_delay_ms > 0:
+                time.sleep(self._frame_delay_ms / 1000.0)
 
 
 # Singleton instance — imported by main.py lifespan and fall_analyzer

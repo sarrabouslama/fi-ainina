@@ -27,10 +27,32 @@ class Settings(BaseSettings):
     fall_confidence_threshold: float = 0.75  # score above which a fall is confirmed
     fall_persistence_seconds: float = 0.5    # score must stay above threshold for this long
     velocity_threshold: float = 200.0        # px/s normalised — above = fast fall signature
-    body_ratio_lying: float = 1.2            # width/height > this = lying
-    body_ratio_sitting_min: float = 0.5      # width/height in this range = sitting
-    body_ratio_sitting_max: float = 0.9
-    body_angle_standing_min: float = 70.0    # torso angle degrees — above = standing
+    
+    # ── Vertical Span Ratio (VSR) thresholds — CAMERA INVARIANT ──
+    # VSR = |y_ankle - y_shoulder| / body_height (0-1 range)
+    # Much more robust than bounding box ratio
+    vsr_standing_min: float = 0.85           # above = standing (nearly full body vertical)
+    vsr_sitting_min: float = 0.50            # 0.50-0.85 = sitting
+    vsr_lying_max: float = 0.50              # below = lying (body mostly horizontal)
+    
+    # Torso angle thresholds (in degrees)
+    angle_standing_min: float = 60.0         # above = standing
+    angle_sitting_min: float = 30.0          # below = lying, above = sitting or standing
+    
+    # ── FALL DETECTION thresholds (velocity-based) ──
+    # A fall is detected by fast transitions from upright to lying
+    fall_angular_velocity_threshold: float = 45.0        # degrees/sec — threshold for "fast" collapse
+    fall_vsr_velocity_threshold: float = -0.4            # per second — body flattening rate
+    fall_intentional_lie_down_time: float = 2.0          # seconds — transitions slower than this are intentional
+    fall_alert_timeout: float = 3.0                      # seconds — after this long lying, trigger alert
+    fall_confirmation_time: float = 0.5                  # seconds — must be LYING for this long to confirm
+    
+    # [DEPRECATED] Old bounding box ratio thresholds — kept for fallback only
+    # These were designed for normalized coords but are unreliable with arm movement
+    body_ratio_sitting_min: float = 2.0      # below this = standing (ratio < 2)
+    body_ratio_sitting_max: float = 8.0      # above this = lying (ratio > 8)
+    body_ratio_lying: float = 8.0            # >= this = lying
+    body_angle_standing_min: float = 70.0    # old threshold, superseded by angle_standing_min
 
     # ── Confidence weights ───────────────────────────────────
     # Comma-separated: [angle, ratio, velocity, head, persistence]
