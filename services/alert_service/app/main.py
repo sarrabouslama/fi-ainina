@@ -25,6 +25,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from app.metrics import register_metrics, ALERTS_RECEIVED, ALERTS_SKIPPED, ALERTS_DISPATCHED
 from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,10 +79,19 @@ async def handle_alert(event: AlertEvent):
     5. Record cooldown reset
     """
     logger.info(f"Processing alert: {event.event_type} from {event.user_id} (severity: {event.severity})")
+    try:
+        ALERTS_RECEIVED.labels(event_type=event.event_type).inc()
+    except Exception:
+        # Metrics should never crash processing
+        logger.debug("Failed to increment alerts_received metric", exc_info=True)
     
     # Step 1: Check cooldown
     if not await cooldown_manager.can_send_alert(event.user_id, event.event_type):
         logger.debug(f"Alert skipped due to cooldown: {event.event_type}/{event.user_id}")
+        try:
+            ALERTS_SKIPPED.labels(event_type=event.event_type).inc()
+        except Exception:
+            logger.debug("Failed to increment alerts_skipped metric", exc_info=True)
         return
     
     # Step 2: Fetch recipients from database
@@ -104,9 +114,11 @@ async def handle_alert(event: AlertEvent):
     
     # Step 4: Dispatch to all channels in parallel
     tasks = []
+    channel_names = []
     
     # WebSocket (always, broadcast to all connected clients)
     tasks.append(ws_manager.broadcast(ws_message))
+    channel_names.append("websocket")
     
     # Email (to family members)
     email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] == "family"]
@@ -116,6 +128,7 @@ async def handle_alert(event: AlertEvent):
 
     if email_recipients:
         tasks.append(email_handler.send_alert(event, email_recipients))
+        channel_names.append("email")
     
     # SMS / WhatsApp (to caregivers)
     sms_recipients = [r.get("phone") for r in recipients if r.get("phone") and r["role"] in ["caregiver", "admin"]]
@@ -130,13 +143,20 @@ async def handle_alert(event: AlertEvent):
 
     if sms_recipients:
         tasks.append(sms_handler.send_alert(event, sms_recipients))
+        channel_names.append(sms_handler.channel_name or "sms")
     
     # Wait for all to complete
     try:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i, result in enumerate(results):
+            channel = channel_names[i] if i < len(channel_names) else f"chan_{i}"
             if isinstance(result, Exception):
-                logger.error(f"Error in dispatch task {i}: {result}")
+                logger.error(f"Error in dispatch task {i} ({channel}): {result}")
+            else:
+                try:
+                    ALERTS_DISPATCHED.labels(event_type=event.event_type, channel=channel).inc()
+                except Exception:
+                    logger.debug("Failed to increment alerts_dispatched metric", exc_info=True)
     except Exception as e:
         logger.error(f"Error during parallel dispatch: {e}", exc_info=True)
     
@@ -235,6 +255,7 @@ app = FastAPI(
     description="Real-time alert dispatching: WebSocket, Email, SMS",
     lifespan=lifespan
 )
+register_metrics(app)
 
 
 # ─────────────────────────────────────────────────────────────

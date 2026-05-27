@@ -50,6 +50,14 @@ test-alert:
 			"metadata": {"confidence": 0.95} \
 		}' | jq
 
+test-email:
+	@echo "Running SMTP email test script..."
+	python app/scripts/test_email.py
+
+test-whatsapp:
+	@echo "Running Twilio WhatsApp test script..."
+	python app/scripts/test_whatsapp.py
+
 test-health:
 	@echo "Checking Alert Service health..."
 	curl http://localhost:8005/health | jq

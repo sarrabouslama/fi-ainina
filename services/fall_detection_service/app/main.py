@@ -1,4 +1,8 @@
 from fastapi import FastAPI
+from app.metrics import register_metrics
+
+app = FastAPI(title="FiAinina Fall Detection Service", version="1.0.0")
+register_metrics(app)
 
 @app.get("/health")
 def health():

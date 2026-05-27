@@ -2,8 +2,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from app.llm_engine import generate_chat_response
 from app.config import settings
+from app.metrics import register_metrics
 
 app = FastAPI(title="FiAinina LLM Service", version="1.0.0")
+register_metrics(app)
 
 class ChatRequest(BaseModel):
     user_id: str = Field(..., description="Unique identifier for the user")
