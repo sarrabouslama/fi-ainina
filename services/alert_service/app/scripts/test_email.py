@@ -13,7 +13,7 @@ from app.models import AlertEvent
 
 
 async def main():
-    recipient = os.getenv("TEST_EMAIL_TO", "mailtrap-test@example.com")
+    recipient = os.getenv("TEST_EMAIL_TO", "eyaazayeni@gmail.com")
     handler = EmailHandler()
 
     event = AlertEvent(
@@ -27,7 +27,7 @@ async def main():
 
     sent = await handler.send_alert(event, [recipient])
     if sent:
-        print(f"Email sent to {recipient}. Check your Mailtrap inbox.")
+        print(f"Email sent to {recipient}. Check your Gmail inbox.")
     else:
         raise SystemExit("Email send failed. Check alert_service logs and SMTP settings.")
 
