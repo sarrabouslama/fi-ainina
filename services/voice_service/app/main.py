@@ -1,15 +1,30 @@
-from fastapi import FastAPI
-from app.metrics import register_metrics
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import shutil, os
+from app.stt import transcribe
+from app.tts import speak
 
-app = FastAPI(title="FiAinina Voice Service", version="1.0.0")
-register_metrics(app)
+app = FastAPI()
+
+class TextInput(BaseModel):
+    text: str
 
 @app.get("/health")
 def health():
-    return {"service": "voice_service", "status": "ok"}
+    return {"status": "ok", "service": "voice_service"}
 
-# TODO P2: implement voice endpoints
-# POST /transcribe        (audio → text via Whisper)
-# POST /synthesize        (text → audio via TTS)
-# GET  /memory/{person_id}
-# POST /memory/{person_id}
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    temp_path = f"temp_{file.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    text = transcribe(temp_path)
+    os.remove(temp_path)
+    return {"text": text}
+
+@app.post("/speak")
+def speak_text(input: TextInput):
+    output_path = "response.wav"
+    speak(input.text, output_path)
+    return FileResponse(output_path, media_type="audio/wav")
