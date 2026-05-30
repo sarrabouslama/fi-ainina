@@ -23,9 +23,9 @@ corrupted by arm position and camera framing.
 """
 import numpy as np
 from typing import Optional, Tuple
-from app.core.pose_estimator import PoseResult, LM
+from app.core.vision.pose_estimator import PoseResult, LM
 from app.config import settings
-from app.core.debug_utils import debug_print
+from app.core.utils.debug_utils import debug_print
 
 
 # ── Bounding box helpers ──────────────────────────────────────────────────────

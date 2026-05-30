@@ -11,8 +11,8 @@ independent.
 import time
 from collections import deque
 from typing import Optional, Deque, Tuple
-from app.core.pose_estimator import PoseResult, LM
-from app.core.body_proportions import get_body_height_px
+from app.core.vision.pose_estimator import PoseResult, LM
+from app.core.features.body_proportions import get_body_height_px
 from app.config import settings
 
 
