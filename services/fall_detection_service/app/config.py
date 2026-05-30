@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     camera_fps: int = 30
 
     # ── Redis ───────────────────────────────────────────────
-    redis_url: str = "redis://redis:6379/0"
+    redis_url: str = "redis://localhost:6379/0"
     redis_channel_fall: str = "fall_events"
 
     # ── Person context ──────────────────────────────────────

@@ -7,22 +7,8 @@ Coordinate system reminder:
 """
 import numpy as np
 from typing import Optional, Tuple
-from app.core.pose_estimator import PoseResult, Landmark, LM
-from app.core.debug_utils import debug_print
-
-
-def three_point_angle(a: Tuple[float, float],
-                      b: Tuple[float, float],
-                      c: Tuple[float, float]) -> float:
-    """Angle at point B formed by vectors BA and BC, in degrees [0, 180]."""
-    ba = np.array([a[0] - b[0], a[1] - b[1]], dtype=float)
-    bc = np.array([c[0] - b[0], c[1] - b[1]], dtype=float)
-    n_ba, n_bc = np.linalg.norm(ba), np.linalg.norm(bc)
-    if n_ba == 0 or n_bc == 0:
-        return 0.0
-    cos_a = np.clip(np.dot(ba, bc) / (n_ba * n_bc), -1.0, 1.0)
-    return float(np.degrees(np.arccos(cos_a)))
-
+from app.core.vision.pose_estimator import PoseResult, Landmark, LM
+from app.core.utils.debug_utils import debug_print
 
 def body_angle(pose: PoseResult) -> Optional[float]:
     """

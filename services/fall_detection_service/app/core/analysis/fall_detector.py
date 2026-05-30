@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from app.config import settings
-from app.core.debug_utils import debug_print
+from app.core.utils.debug_utils import debug_print
 
 
 class FallState(Enum):
