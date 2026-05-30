@@ -1,0 +1,1 @@
+"""Route package for the emotion service."""
