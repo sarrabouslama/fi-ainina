@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
 from pathlib import Path
+
+# Add project root to sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
 
 from app.capture import _largest_face_bbox, _crop_face
 from app.emotion import analyze_emotion
 from app.redness import analyze_redness
+from app.publisher import RedisEventPublisher
 
 
 def _overlay(frame, lines):
@@ -57,6 +62,31 @@ def run_image(path: Path) -> int:
             "redness_reliable": redness_result.redness_reliable,
         }
     )
+
+    # Publish to Redis for testing
+    publisher = RedisEventPublisher()
+    
+    # Check for distress
+    if emotion_result.severity is not None and emotion_result.emotion not in {"happy", "neutral"}:
+        print(f"Publishing distress alert to Redis: {emotion_result.emotion}")
+        publisher.publish_distress_event(
+            severity=emotion_result.severity,
+            confidence=emotion_result.confidence,
+            emotion=emotion_result.emotion,
+            score=emotion_result.confidence,
+            redness_score=redness_result.redness_score,
+            redness_level=redness_result.redness_level,
+            redness_reliable=redness_result.redness_reliable,
+        )
+    
+    # Check for extreme redness
+    if redness_result.redness_score > 0.8:
+        print(f"Publishing extreme redness alert to Redis: {redness_result.redness_score:.3f}")
+        publisher.publish_redness_alert(
+            redness_score=redness_result.redness_score,
+            level=redness_result.redness_level,
+        )
+
     cv2.imshow("emotion test", frame)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

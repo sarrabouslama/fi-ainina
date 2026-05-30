@@ -53,7 +53,7 @@ def _emotion_severity(emotion: str, confidence: float) -> Optional[str]:
 
 def analyze_emotion(face_region) -> EmotionAnalysisResult:
     """Analyze a cropped face region and return the dominant emotion."""
-    global _DEEPFACE_AVAILABLE
+    global _DEEPFACE_AVAILABLE, DeepFace
 
     
     if face_region is None or getattr(face_region, "size", 0) == 0:
@@ -64,6 +64,8 @@ def analyze_emotion(face_region) -> EmotionAnalysisResult:
         # Check periodically if we can import it now (e.g. if installed at runtime)
         try:
             from deepface import DeepFace
+            # Inject into global namespace so it's available after import
+            globals()["DeepFace"] = DeepFace
             _DEEPFACE_AVAILABLE = True
             logger.info("DeepFace is now available.")
         except ImportError:
