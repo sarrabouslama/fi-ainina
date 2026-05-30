@@ -1,11 +1,13 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-prometheus_client==0.16.0
-openai-whisper==20231117
-TTS==0.22.0
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.30
-redis==5.0.4
-pydantic==2.7.1
-python-dotenv==1.0.1
-python-multipart==0.0.9
+fastapi
+uvicorn[standard]
+openai-whisper
+TTS                    # Coqui TTS
+sounddevice            # capture micro
+numpy
+scipy
+redis
+asyncio
+python-dotenv
+pydantic
+pyaudio                # alternative micro
+webrtcvad              # Voice Activity Detection pour wake word
