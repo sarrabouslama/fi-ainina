@@ -12,7 +12,7 @@ grant "full" mode when the key TORSO landmarks (shoulders + hips) are
 all visible, even if the total count is lower. This prevents the
 pipeline from silently skipping fall detection the moment someone falls.
 """
-from app.core.pose_estimator import PoseResult, LM
+from app.core.vision.pose_estimator import PoseResult, LM
 from app.config import settings
 
 # Upper body landmark indices
