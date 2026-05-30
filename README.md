@@ -69,6 +69,39 @@ Services communicate via Redis Pub/Sub. **Do not change these channel names with
 | `inactivity_events` | P4 | P5 | duration + person_id |
 | `alerts` | P5 | Frontend WS | alert notification |
 
+## Emotion Service Test Commands
+
+Run the live camera preview from the project virtualenv:
+
+```powershell
+cd services/emotion_service
+& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' camera_preview.py
+```
+
+Test a still image:
+
+```powershell
+& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/test_media.py --image path\to\face.jpg
+```
+
+Test a video file:
+
+```powershell
+& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/test_media.py --video path\to\video.mp4
+```
+
+Watch Redis alerts while the service runs:
+
+```powershell
+& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/redis_alert_listener.py
+```
+
+Check Redis pub/sub round-trip directly:
+
+```powershell
+& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/check_redis_pubsub.py
+```
+
 ## Project Structure
 
 ```
