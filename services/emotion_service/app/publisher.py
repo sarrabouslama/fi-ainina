@@ -46,7 +46,13 @@ class RedisEventPublisher:
     """Publish service events to Redis channels."""
 
     def __init__(self) -> None:
-        self._client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        # Use protocol=2 for compatibility with older Redis versions (like 5.x)
+        self._client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            decode_responses=True,
+            protocol=2
+        )
 
     def _publish(self, channel: str, payload: dict) -> None:
         try:
@@ -79,6 +85,22 @@ class RedisEventPublisher:
                 "redness_score": redness_score,
                 "redness_level": redness_level,
                 "redness_reliable": redness_reliable,
+            },
+        )
+        self._publish("emotion_events", payload.__dict__)
+
+    def publish_redness_alert(self, *, redness_score: float, level: str) -> None:
+        """Publish an extreme redness alert event."""
+        payload = DistressEventPayload(
+            event_type="extreme_redness_detected",
+            user_id=USER_ID,
+            timestamp=_utc_now_iso(),
+            severity="high",
+            confidence=1.0,
+            metadata={
+                "redness_score": redness_score,
+                "redness_level": level,
+                "message": "Extreme facial redness detected",
             },
         )
         self._publish("emotion_events", payload.__dict__)

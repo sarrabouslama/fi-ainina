@@ -21,7 +21,8 @@ def main() -> int:
 
     host = os.getenv("REDIS_HOST", "localhost")
     port = int(os.getenv("REDIS_PORT", "6379"))
-    client = redis.Redis(host=host, port=port, decode_responses=True)
+    # Use protocol=2 for compatibility with older Redis versions (like 5.x)
+    client = redis.Redis(host=host, port=port, decode_responses=True, protocol=2)
 
     try:
         client.ping()

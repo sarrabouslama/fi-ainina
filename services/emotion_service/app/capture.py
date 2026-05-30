@@ -46,6 +46,10 @@ def _capture_loop() -> None:
     inactivity_timer = InactivityTimer()
     frame_index = 0
 
+    # State tracking for alerts to prevent spamming
+    last_distress_active = False
+    last_redness_active = False
+
     while True:
         capture = cv2.VideoCapture(0)
         if not capture.isOpened():
@@ -81,16 +85,34 @@ def _capture_loop() -> None:
                         inactivity_seconds=inactivity_result.inactivity_seconds,
                     )
 
-                    if emotion_result.severity is not None and emotion_result.emotion not in {"happy", "neutral"}:
-                        publisher.publish_distress_event(
-                            severity=emotion_result.severity,
-                            confidence=emotion_result.confidence,
-                            emotion=emotion_result.emotion,
-                            score=emotion_result.confidence,
-                            redness_score=redness_result.redness_score,
-                            redness_level=redness_result.redness_level,
-                            redness_reliable=redness_result.redness_reliable,
-                        )
+                    # --- State-aware Alert Logic ---
+                    is_distressed = (
+                        emotion_result.severity is not None 
+                        and emotion_result.emotion not in {"happy", "neutral"}
+                    )
+                    if is_distressed:
+                        if not last_distress_active:
+                            logger.info("Distress state ENTERED (emotion: %s)", emotion_result.emotion)
+                            publisher.publish_distress_event(
+                                severity=emotion_result.severity,
+                                confidence=emotion_result.confidence,
+                                emotion=emotion_result.emotion,
+                                score=emotion_result.confidence,
+                                redness_score=redness_result.redness_score,
+                                redness_level=redness_result.redness_level,
+                                redness_reliable=redness_result.redness_reliable,
+                            )
+                    last_distress_active = is_distressed
+
+                    is_too_red = redness_result.redness_score > 0.8
+                    if is_too_red:
+                        if not last_redness_active:
+                            logger.info("Extreme redness state ENTERED (score: %.3f)", redness_result.redness_score)
+                            publisher.publish_redness_alert(
+                                redness_score=redness_result.redness_score,
+                                level=redness_result.redness_level
+                            )
+                    last_redness_active = is_too_red
 
                     if inactivity_result.transitioned_to_inactive:
                         publisher.publish_inactivity_event(duration_seconds=inactivity_result.inactivity_seconds)

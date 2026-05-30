@@ -9,10 +9,13 @@ import webbrowser
 from typing import Optional, Tuple
 
 import cv2
+import numpy as np
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, StreamingResponse
 import uvicorn
 
+# Force disable DeepFace enforce_detection if needed, but here we just need to ensure 
+# the capture worker behaves like the real one
 from app.emotion import analyze_emotion
 from app.redness import analyze_redness
 
@@ -65,9 +68,34 @@ def _overlay_text(frame, lines: list[str]) -> None:
 def _camera_worker() -> None:
     global _LATEST_FRAME
 
-    capture = cv2.VideoCapture(0)
-    if not capture.isOpened():
-        logger.error("Unable to open webcam device 0")
+    # Try to find a working camera index and backend
+    capture = None
+    # Common indices and backends to try on Windows
+    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, None]
+    indices = [0, 1, 2, 700] # 700 is sometimes used by OBS or virtual cams
+
+    for backend in backends:
+        for index in indices:
+            logger.info("Attempting to open camera %d with backend %s", index, str(backend))
+            if backend is not None:
+                capture = cv2.VideoCapture(index, backend)
+            else:
+                capture = cv2.VideoCapture(index)
+            
+            if capture.isOpened():
+                # Verify we can actually read a frame
+                success, _ = capture.read()
+                if success:
+                    logger.info("Successfully opened camera %d with backend %s", index, str(backend))
+                    break
+                else:
+                    capture.release()
+                    capture = None
+        if capture and capture.isOpened():
+            break
+
+    if not capture or not capture.isOpened():
+        logger.error("CRITICAL: Unable to open ANY webcam device. Please check if another app is using your camera.")
         return
 
     logger.info("Camera preview started. Open http://127.0.0.1:8050/")
@@ -79,28 +107,48 @@ def _camera_worker() -> None:
             time.sleep(0.25)
             continue
 
-        bbox = _largest_face_bbox(frame)
-        if bbox is not None:
-            x, y, width, height = bbox
-            cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 255, 255), 2)
-            face_region = _crop_face(frame, bbox)
-            emotion_result = analyze_emotion(face_region)
-            redness_result = analyze_redness(face_region)
+        try:
+            # Create a copy for analysis to avoid drawing boxes on the region passed to DeepFace
+            analysis_frame = frame.copy()
+            
+            bbox = _largest_face_bbox(analysis_frame)
+            if bbox is not None:
+                x, y, width, height = bbox
+                face_region = _crop_face(analysis_frame, bbox)
+                
+                # Draw on the display frame
+                cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 255, 255), 2)
+                
+                emotion_result = analyze_emotion(face_region)
+                redness_result = analyze_redness(face_region)
 
-            lines = [
-                f"Emotion: {emotion_result.emotion} ({emotion_result.confidence:.2f})",
-                f"Redness: {redness_result.redness_level} ({redness_result.redness_score:.3f})",
-                f"Reliable: {redness_result.redness_reliable}",
-            ]
-        else:
-            lines = ["No face detected", "Move closer to the camera"]
+                lines = [
+                    f"Emotion: {emotion_result.emotion.upper()} ({emotion_result.confidence:.2f})",
+                    f"Redness: {redness_result.redness_level.upper()} ({redness_result.redness_score:.3f})",
+                    f"Reliable: {redness_result.redness_reliable}",
+                ]
+                
+                if redness_result.redness_score > 0.8:
+                    lines.append("!!! EXTREME REDNESS DETECTED !!!")
+            else:
+                lines = ["No face detected", "Move closer to the camera"]
 
-        _overlay_text(frame, lines)
+            _overlay_text(frame, lines)
 
-        ok, encoded = cv2.imencode(".jpg", frame)
-        if ok:
-            with _FRAME_LOCK:
-                _LATEST_FRAME = encoded.tobytes()
+            ok, encoded = cv2.imencode(".jpg", frame)
+            if ok:
+                with _FRAME_LOCK:
+                    _LATEST_FRAME = encoded.tobytes()
+        except Exception as e:
+            logger.error(f"Frame processing error: {e}")
+            # Even if processing fails, show the raw frame
+            ok, encoded = cv2.imencode(".jpg", frame)
+            if ok:
+                with _FRAME_LOCK:
+                    _LATEST_FRAME = encoded.tobytes()
+        
+        # Small sleep to yield
+        time.sleep(0.01)
 
 
 def _frame_stream():

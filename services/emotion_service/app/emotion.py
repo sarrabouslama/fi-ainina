@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -52,12 +53,21 @@ def _emotion_severity(emotion: str, confidence: float) -> Optional[str]:
 
 def analyze_emotion(face_region) -> EmotionAnalysisResult:
     """Analyze a cropped face region and return the dominant emotion."""
+    global _DEEPFACE_AVAILABLE
+
+    
     if face_region is None or getattr(face_region, "size", 0) == 0:
         return EmotionAnalysisResult(emotion="neutral", confidence=0.0, severity=None)
 
     # If DeepFace isn't available, return neutral without raising repeatedly.
     if not _DEEPFACE_AVAILABLE:
-        return EmotionAnalysisResult(emotion="neutral", confidence=0.0, severity=None)
+        # Check periodically if we can import it now (e.g. if installed at runtime)
+        try:
+            from deepface import DeepFace
+            _DEEPFACE_AVAILABLE = True
+            logger.info("DeepFace is now available.")
+        except ImportError:
+            return EmotionAnalysisResult(emotion="neutral (DISABLED)", confidence=0.0, severity=None)
 
     try:
         rgb_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2RGB)
