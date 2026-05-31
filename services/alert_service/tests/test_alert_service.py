@@ -357,9 +357,10 @@ class TestIntegration:
 
     def test_subscriber_channels_include_upstream_publishers(self):
         """Alert service should subscribe to every upstream Redis channel."""
-        assert "fall_events" in ALERT_CHANNELS
         assert "emotion_events" in ALERT_CHANNELS
-        assert "inactivity_events" in ALERT_CHANNELS
+        assert "fall_alerts" in ALERT_CHANNELS
+        assert "fall_events" not in ALERT_CHANNELS
+        assert "inactivity_events" not in ALERT_CHANNELS
 
     def test_parse_fall_detection_payload(self):
         """Parse the payload shape published by fall_detection_service."""
