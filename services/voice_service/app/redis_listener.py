@@ -11,7 +11,7 @@ def handle_fall_event(data: dict):
     event_type = data.get("event_type", "unknown")
     person_id = data.get("person_id", "unknown")
     
-    print(f"🚨 Fall event received! type={event_type} person={person_id}")
+    print(f" Fall event received! type={event_type} person={person_id}")
     
     # Speak urgent alert to the elderly person
     speak(
@@ -26,7 +26,7 @@ def start_redis_listener():
         r.ping()
         pubsub = r.pubsub()
         pubsub.subscribe(CHANNEL_FALL)
-        print(f"✅ Redis listener active on channel: {CHANNEL_FALL}")
+        print(f"Redis listener active on channel: {CHANNEL_FALL}")
 
         for message in pubsub.listen():
             if message["type"] == "message":
@@ -34,7 +34,7 @@ def start_redis_listener():
                     data = json.loads(message["data"])
                     handle_fall_event(data)
                 except json.JSONDecodeError:
-                    print(f"⚠️ Could not parse message: {message['data']}")
+                    print(f" Could not parse message: {message['data']}")
 
     except Exception as e:
-        print(f"⚠️ Redis not available: {e} — voice service running without Redis")
+        print(f" Redis not available: {e} — voice service running without Redis")

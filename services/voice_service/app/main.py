@@ -5,6 +5,7 @@ import shutil, os, httpx, threading
 from app.stt import transcribe
 from app.tts import speak
 from app.redis_listener import start_redis_listener
+from app.wake_word import start_wake_word_detector
 
 app = FastAPI()
 
@@ -13,10 +14,11 @@ app = FastAPI()
 async def startup_event():
     thread = threading.Thread(target=start_redis_listener, daemon=True)
     thread.start()
-    print("✅ Voice service started!")
+    print(" Voice service started!")
 
 class TextInput(BaseModel):
     text: str
+    speed: float = 1.0
 
 # ── Health check ──────────────────────────────────────────
 @app.get("/health")
@@ -49,7 +51,7 @@ async def full_pipeline(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
     text = transcribe(temp_path)
     os.remove(temp_path)
-    print(f"📝 Transcribed: {text}")
+    print(f" Transcribed: {text}")
 
     # Step 2: send to LLM service (P1)
     try:
@@ -60,12 +62,18 @@ async def full_pipeline(file: UploadFile = File(...)):
             )
             llm_response = response.json().get("response", "Je n'ai pas compris.")
     except Exception as e:
-        print(f"⚠️ LLM service not available: {e}")
+        print(f" LLM service not available: {e}")
         llm_response = f"J'ai bien entendu: {text}"
 
-    print(f"🤖 LLM response: {llm_response}")
+    print(f" LLM response: {llm_response}")
 
     # Step 3: speak the response
     output_path = "pipeline_response.wav"
     speak(llm_response, output_path)
     return FileResponse(output_path, media_type="audio/wav")
+
+@app.post("/wake-word/start")
+def start_wake_word():
+    thread = threading.Thread(target=start_wake_word_detector, daemon=True)
+    thread.start()
+    return {"status": "Wake word detector started", "wake_word": "Bonjour Léa"}
