@@ -27,10 +27,14 @@ async def run_alerts_ws_bridge(alerts_ws_url: str, session_factory: async_sessio
 
 
 async def _handle_event(event: dict, session_factory: async_sessionmaker[AsyncSession]):
+    alert_type = event.get('alert_type') or event.get('event_type')
+    if not alert_type:
+        raise ValueError('alert event is missing alert_type/event_type')
+
     async with session_factory() as db:
         alert = Alert(
             user_id=event['user_id'],
-            alert_type=event['alert_type'],
+            alert_type=alert_type,
             severity=event['severity'],
             status='escalated',
             triggered_at=datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00')),

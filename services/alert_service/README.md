@@ -96,8 +96,7 @@ WS /ws
    - No → Skip (log as "Still in cooldown")
 
 4. **Fetch Recipients** from PostgreSQL (person_watchers + users)
-   - Alice (family) → alice@example.com
-   - Bob (caregiver) → bob@example.com
+        - Alice (caregiver) → alice@example.com
 
 5. **Dispatch in Parallel** :
    - WebSocket : Send to all connected clients (frontend)
@@ -218,7 +217,7 @@ For production, ensure:
 - Cooldown is 5 min per (user_id, event_type) pair
 - All clients connected to WebSocket receive all alerts (frontend filters)
 - Email/SMS only sent if recipients configured in PostgreSQL
-- Alert_log is append-only (soft-delete only for admin)
+- Alert_log is append-only
 - Subscriber is background asyncio task (runs continuously)
 
 ---

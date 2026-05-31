@@ -3,11 +3,13 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
+from app.enums import UserRole
+
 
 @dataclass
 class WSContext:
     user_id: str
-    role: str
+    role: UserRole
     assigned_user_ids: set[str]
 
 
@@ -42,9 +44,9 @@ class ConnectionManager:
     def _can_see(self, ctx: WSContext, event: dict) -> bool:
         payload = event.get('payload', {})
         user_id = payload.get('user_id')
-        if ctx.role == 'admin':
+        if ctx.role == UserRole.admin:
             return True
-        if ctx.role == 'caregiver':
+        if ctx.role == UserRole.caregiver:
             return not user_id or user_id in ctx.assigned_user_ids
         return user_id == ctx.user_id
 

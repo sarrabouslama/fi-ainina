@@ -11,6 +11,7 @@ from sqlalchemy import text
 from uuid import UUID
 
 from app import config
+from app.enums import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +67,13 @@ async def get_alert_recipients(session: AsyncSession, person_id: str) -> list[di
         query = text("""
             SELECT 
                 u.id as user_id,
-                u.name,
+                u.full_name,
                 u.email,
+                u.phone,
                 u.role
             FROM users u
             INNER JOIN person_watchers pw ON u.id = pw.user_id
             WHERE pw.person_id = :person_id
-              AND u.deleted_at IS NULL
-              AND pw.deleted_at IS NULL
         """)
         
         result = await session.execute(query, {"person_id": person_id})
@@ -84,8 +84,8 @@ async def get_alert_recipients(session: AsyncSession, person_id: str) -> list[di
                 "user_id": str(row[0]),
                 "name": row[1],
                 "email": row[2],
-                "phone": None,  # Not stored in users table, could extend
-                "role": row[3]
+                "phone": row[3],
+                "role": UserRole(row[4])
             }
             for row in rows
         ]

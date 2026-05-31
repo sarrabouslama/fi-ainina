@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON, TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.crypto import decrypt_json, encrypt_json
 from app.database import Base
+from app.enums import UserRole
 
 
 class EncryptedJSON(TypeDecorator):
@@ -31,9 +32,10 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, name='user_role'), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     consent_given: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -41,6 +43,26 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     alerts: Mapped[list['Alert']] = relationship(back_populates='user')
+
+
+class PersonWatcher(Base):
+    __tablename__ = 'person_watchers'
+
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    person_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AlertLog(Base):
+    __tablename__ = 'alert_log'
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default='sent')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class Alert(Base):
@@ -110,7 +132,7 @@ class ReviewMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     review_id: Mapped[int] = mapped_column(ForeignKey('reviews.id'), nullable=False)
     sender_user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False)
-    sender_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    sender_role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, name='user_role'), nullable=False)
     message_type: Mapped[str] = mapped_column(String(20), nullable=False, default='message')
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

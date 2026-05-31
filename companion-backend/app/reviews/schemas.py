@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.enums import UserRole
+
 
 class ReviewCreate(BaseModel):
     review_type: str
@@ -21,7 +23,7 @@ class ReviewMessageResponse(BaseModel):
     id: int
     review_id: int
     sender_user_id: str
-    sender_role: str
+    sender_role: UserRole
     message_type: str
     content: str
     timestamp: datetime

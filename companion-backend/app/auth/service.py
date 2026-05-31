@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import redis_client
+from app.enums import UserRole
 from app.models import User
 from app.security import create_access_token, create_refresh_token, decode_token, verify_password
 
@@ -26,7 +27,7 @@ async def login(db: AsyncSession, email: str, password: str) -> tuple[str, str]:
         raise HTTPException(status_code=401, detail='Invalid credentials')
 
     await redis_client.delete(fail_key)
-    return create_access_token(user.id, user.role), create_refresh_token(user.id, user.role)
+    return create_access_token(user.id, user.role.value), create_refresh_token(user.id, user.role.value)
 
 
 async def rotate_refresh_token(refresh_token: str) -> tuple[str, str, dict]:
@@ -40,8 +41,8 @@ async def rotate_refresh_token(refresh_token: str) -> tuple[str, str, dict]:
     ttl = int(timedelta(days=settings.refresh_token_days).total_seconds())
     await redis_client.setex(f"blacklist:{payload['jti']}", ttl, '1')
 
-    access = create_access_token(payload['sub'], payload['role'])
-    refresh = create_refresh_token(payload['sub'], payload['role'])
+    access = create_access_token(payload['sub'], UserRole(payload['role']).value)
+    refresh = create_refresh_token(payload['sub'], UserRole(payload['role']).value)
     return access, refresh, payload
 
 

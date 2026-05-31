@@ -16,13 +16,15 @@ depends_on = None
 
 
 def upgrade() -> None:
+    user_role = sa.Enum('caregiver', 'elderly', 'admin', name='user_role')
+
     op.create_table(
         'users',
         sa.Column('id', sa.String(length=36), primary_key=True),
         sa.Column('email', sa.String(length=255), nullable=False, unique=True),
         sa.Column('hashed_password', sa.String(length=255), nullable=False),
         sa.Column('full_name', sa.String(length=255), nullable=False),
-        sa.Column('role', sa.String(length=20), nullable=False),
+        sa.Column('role', user_role, nullable=False),
         sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column('consent_given', sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column('consent_date', sa.DateTime(timezone=True), nullable=True),

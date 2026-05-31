@@ -11,6 +11,7 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from redis.asyncio import Redis
 
 from app.models import AlertEvent, AlertRecipient
+from app.enums import UserRole
 from app.handlers.cooldown_manager import CooldownManager
 from app.handlers.websocket_handler import ConnectionManager
 from app.handlers.email_handler import EmailHandler
@@ -220,12 +221,12 @@ class TestAlertEventModels:
             name="Alice Dupont",
             email="alice@example.com",
             phone="+33612345678",
-            role="family"
+            role=UserRole.caregiver
         )
         
         assert recipient.name == "Alice Dupont"
         assert recipient.email == "alice@example.com"
-        assert recipient.role == "family"
+        assert recipient.role == UserRole.caregiver
 
 
 # ─────────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ import pytest
 import asyncio
 from datetime import datetime
 
+from app.enums import UserRole
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -43,14 +45,14 @@ def sample_recipients():
             "name": "Alice Dupont",
             "email": "alice@example.com",
             "phone": "+33612345678",
-            "role": "family"
+            "role": UserRole.caregiver
         },
         {
             "user_id": "550e8400-e29b-41d4-a716-446655440001",
             "name": "Bob Caregiver",
             "email": "bob@example.com",
             "phone": "+33698765432",
-            "role": "caregiver"
+            "role": UserRole.caregiver
         }
     ]
 

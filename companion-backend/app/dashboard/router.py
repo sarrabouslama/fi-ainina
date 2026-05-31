@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
+from app.enums import UserRole
 from app.main_state import health_state
 from app.models import Alert, ConversationSession, Review, ReviewMessage, User
 
@@ -19,19 +20,19 @@ async def overview(current: User = Depends(get_current_user), db: AsyncSession =
     current_user_ids = scope_user_ids or [current.id]
     today = datetime.utcnow().date()
 
-    overview_filters = [Alert.user_id.in_(current_user_ids)] if current.role != 'admin' else []
+    overview_filters = [Alert.user_id.in_(current_user_ids)] if current.role != UserRole.admin else []
 
     active_alerts = await _count_alerts(db, overview_filters, ['pending', 'escalated'])
     alerts_today = await _count_alerts(db, overview_filters, triggered_on=today)
     false_pos = await _count_alerts(db, overview_filters, ['false_positive'])
-    conv_count = await _count_conversations(db, current_user_ids if current.role != 'admin' else None)
+    conv_count = await _count_conversations(db, current_user_ids if current.role != UserRole.admin else None)
     open_reviews = await _count_reviews(db, current, current_user_ids)
 
     response = {
         'role': current.role,
         'scope': {
-            'type': 'global' if current.role == 'admin' else ('assigned' if current.role == 'caregiver' else 'self'),
-            'user_ids': scope_user_ids if current.role != 'admin' else None,
+            'type': 'global' if current.role == UserRole.admin else ('assigned' if current.role == UserRole.caregiver else 'self'),
+            'user_ids': scope_user_ids if current.role != UserRole.admin else None,
         },
         'services_health': dict(health_state.status),
         'active_alerts': active_alerts,
@@ -43,15 +44,15 @@ async def overview(current: User = Depends(get_current_user), db: AsyncSession =
         },
     }
 
-    if current.role == 'admin':
-        user_count = (await db.execute(select(func.count(User.id)).where(User.role.in_(['elderly', 'caregiver'])))).scalar_one()
+    if current.role == UserRole.admin:
+        user_count = (await db.execute(select(func.count(User.id)).where(User.role.in_([UserRole.elderly, UserRole.caregiver])))).scalar_one()
         response['user_stats'] = {'monitored_users': user_count}
         response['review_stats'] = {
             'total_reviews': await _count_reviews(db, current, None, all_reviews=True),
             'open_reviews': open_reviews,
         }
         response['users'] = await _build_user_summaries(db, None)
-    elif current.role == 'caregiver':
+    elif current.role == UserRole.caregiver:
         response['review_stats'] = {'open_reviews': open_reviews}
         response['users'] = await _build_user_summaries(db, scope_user_ids)
     else:
@@ -62,9 +63,9 @@ async def overview(current: User = Depends(get_current_user), db: AsyncSession =
 
 
 async def _resolve_scope_user_ids(current: User, db: AsyncSession) -> list[str]:
-    if current.role == 'admin':
+    if current.role == UserRole.admin:
         return []
-    if current.role == 'elderly':
+    if current.role == UserRole.elderly:
         return [current.id]
     preferences = current.preferences or {}
     assigned = preferences.get('assigned_user_ids') or []
@@ -104,7 +105,7 @@ async def _count_reviews(
     all_reviews: bool = False,
 ) -> int:
     query = select(func.count(Review.id)).where(Review.status == 'open')
-    if not all_reviews and current.role != 'admin':
+    if not all_reviews and current.role != UserRole.admin:
         if user_ids:
             query = query.where(Review.created_by_user_id.in_(user_ids))
         else:

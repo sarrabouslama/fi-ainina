@@ -39,6 +39,7 @@ async def me_route(user: User = Depends(get_current_user)):
     return MeResponse(
         id=user.id,
         email=user.email,
+        phone=user.phone,
         full_name=user.full_name,
         role=user.role,
         consent_given=user.consent_given,

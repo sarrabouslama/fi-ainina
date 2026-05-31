@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user, require_role
 from app.database import get_db
 from app.events.manager import manager
+from app.enums import UserRole
 from app.models import Review, ReviewMessage, User
 from app.reviews.schemas import ReviewCreate, ReviewReply, ReviewMessageResponse, ReviewResponse
 
@@ -69,7 +70,7 @@ def _build_response(review: Review, messages: list[ReviewMessageResponse]) -> Re
 
 @router.post('', response_model=ReviewResponse)
 async def create_review(payload: ReviewCreate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role not in {'caregiver', 'admin'}:
+    if current.role not in {UserRole.caregiver, UserRole.admin}:
         raise HTTPException(status_code=403, detail='Only caregivers and admins can create reviews')
 
     review = Review(
@@ -115,7 +116,7 @@ async def reply_review(
     message = ReviewMessage(
         review_id=review.id,
         sender_user_id=current.id,
-        sender_role='admin',
+        sender_role=UserRole.admin,
         message_type='reply',
         content=content,
         timestamp=datetime.now(timezone.utc),
@@ -133,9 +134,9 @@ async def reply_review(
 @router.get('', response_model=list[ReviewResponse])
 async def list_reviews(current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     query = select(Review)
-    if current.role == 'caregiver':
+    if current.role == UserRole.caregiver:
         query = query.where(Review.created_by_user_id == current.id)
-    elif current.role != 'admin':
+    elif current.role != UserRole.admin:
         raise HTTPException(status_code=403, detail='Forbidden')
 
     reviews = (await db.execute(query.order_by(Review.created_at.desc()))).scalars().all()
@@ -150,6 +151,6 @@ async def get_review(review_id: int, current: User = Depends(get_current_user), 
     review = (await db.execute(select(Review).where(Review.id == review_id))).scalar_one_or_none()
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
-    if current.role != 'admin' and review.created_by_user_id != current.id:
+    if current.role != UserRole.admin and review.created_by_user_id != current.id:
         raise HTTPException(status_code=403, detail='Forbidden')
     return _build_response(review, await _load_messages(db, review.id))
