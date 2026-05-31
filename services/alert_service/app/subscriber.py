@@ -1,8 +1,8 @@
 """
-Redis Subscriber : listen to event channels from P3 (fall_detection) and P4 (emotion/inactivity).
+Redis Subscriber : listen to event channels from emotion service and voice service.
 
 Architecture:
-- Subscribe to 3 channels: fall_events, emotion_events, inactivity_events
+- Subscribe to 2 channels: emotion_events, fall_alerts
 - Parse JSON AlertEvent
 - Call handle_alert() for each event (deduplication, dispatch, logging)
 - Run as background task during FastAPI startup
