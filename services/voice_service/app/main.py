@@ -5,6 +5,7 @@ import shutil, os, httpx, threading
 from app.stt import transcribe
 from app.tts import speak
 from app.redis_listener import start_redis_listener
+from app.wake_word import start_wake_word_detector
 
 app = FastAPI()
 
@@ -17,6 +18,7 @@ async def startup_event():
 
 class TextInput(BaseModel):
     text: str
+    speed: float = 1.0
 
 # ── Health check ──────────────────────────────────────────
 @app.get("/health")
@@ -69,3 +71,9 @@ async def full_pipeline(file: UploadFile = File(...)):
     output_path = "pipeline_response.wav"
     speak(llm_response, output_path)
     return FileResponse(output_path, media_type="audio/wav")
+
+@app.post("/wake-word/start")
+def start_wake_word():
+    thread = threading.Thread(target=start_wake_word_detector, daemon=True)
+    thread.start()
+    return {"status": "Wake word detector started", "wake_word": "Bonjour Léa"}
