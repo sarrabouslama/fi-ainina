@@ -1,50 +1,53 @@
+import speech_recognition as sr
 import sounddevice as sd
 import numpy as np
 import scipy.io.wavfile as wav
 import whisper
-import torch
 import httpx
 import os
 import time
 
-# ── Settings ──────────────────────────────────────────────
 SAMPLE_RATE = 16000
-CHUNK_DURATION = 3        # seconds to record each chunk
-WAKE_WORDS = [
-    "bonjour léa", "bonjour lea", "bonjour lé", "bonjour la",
-    "bonjour là", "bonjour les", "bonjour l", "bon jour léa",
-    "bonsoir léa", "bonsoir lea", "bonjour léas", "bonjour léah"
-]
 VOICE_SERVICE_URL = "http://localhost:8002"
+WAKE_WORDS = [
+    "bonjour léa", "bonjour lea", "bonjour la",
+    "bonjour", "bonne journée", "bon jour"
+]
 
-# ── Load Whisper once ──────────────────────────────────────
-print(" Loading Whisper for wake word detection...")
-model = whisper.load_model("base") 
-print(" Wake word detector ready — say 'Bonjour Léa' to activate!")
+print(" Loading Whisper for command processing...")
+model = whisper.load_model("small")
+print(" Ready!")
 
-def record_chunk(duration: int = CHUNK_DURATION) -> str:
-    """Record audio chunk and save to temp file."""
-    audio = sd.rec(
-        int(duration * SAMPLE_RATE),
-        samplerate=SAMPLE_RATE,
-        channels=1,
-        dtype='int16'
-    )
-    sd.wait()
-    path = "wake_chunk.wav"
-    wav.write(path, SAMPLE_RATE, audio)
-    return path
+# Initialize recognizer
+recognizer = sr.Recognizer()
+recognizer.energy_threshold = 300
+recognizer.dynamic_energy_threshold = True
 
-def is_wake_word(audio_path: str) -> bool:
-    """Check if wake word was spoken in audio chunk."""
-    result = model.transcribe(audio_path, language="fr", fp16=False)
-    text = result["text"].lower().strip()
-    print(f"   heard: '{text}'")
-    return any(wake in text for wake in WAKE_WORDS)
+def listen_for_wake_word():
+    """Uses Google Speech Recognition for wake word — much more accurate."""
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+        print(" Listening for 'Bonjour Léa'... (beep when ready)")
+        os.system('powershell -c "[console]::beep(800,200)"')
+        try:
+            audio = recognizer.listen(source, timeout=5, phrase_time_limit=4)
+            text = recognizer.recognize_google(audio, language="fr-FR").lower()
+            print(f"   heard: '{text}'")
+            return any(wake in text for wake in WAKE_WORDS)
+        except sr.WaitTimeoutError:
+            print("   (no speech detected)")
+            return False
+        except sr.UnknownValueError:
+            print("   (could not understand)")
+            return False
+        except sr.RequestError:
+            print("   (Google API error — check internet)")
+            return False
 
 def record_user_command(duration: int = 5) -> str:
-    """Record user command after wake word detected."""
-    print(" Listening for your command...")
+    """Record user command using sounddevice."""
+    print("🎙️ Listening for your command...")
+    os.system('powershell -c "[console]::beep(1000,300)"')
     audio = sd.rec(
         int(duration * SAMPLE_RATE),
         samplerate=SAMPLE_RATE,
@@ -57,7 +60,6 @@ def record_user_command(duration: int = 5) -> str:
     return path
 
 def send_to_pipeline(audio_path: str):
-    """Send audio to voice service pipeline endpoint."""
     try:
         with open(audio_path, "rb") as f:
             response = httpx.post(
@@ -66,7 +68,6 @@ def send_to_pipeline(audio_path: str):
                 timeout=30
             )
         if response.status_code == 200:
-            # Save and play the response audio
             with open("lea_response.wav", "wb") as out:
                 out.write(response.content)
             os.system("start lea_response.wav")
@@ -77,41 +78,25 @@ def send_to_pipeline(audio_path: str):
         print(f" Could not reach voice service: {e}")
 
 def start_wake_word_detector():
-    """Main loop — continuously listen for wake word."""
-    print(" Listening for 'Bonjour Léa'...")
+    print(" Say 'Bonjour Léa' to activate!")
     print("   (Press Ctrl+C to stop)\n")
 
     while True:
         try:
-            # Record a short chunk
-            audio_path = record_chunk(CHUNK_DURATION)
-
-            
-            
-            if is_wake_word(audio_path):
+            if listen_for_wake_word():
                 print("\n Wake word detected! Léa is listening...")
-
-                # Léa speaks to confirm she's ready
-        
                 from app.tts import speak
                 speak("Oui, je vous écoute. Posez votre question.", "ready.wav")
                 os.system("start ready.wav")
-                time.sleep(3)  # wait for audio to finish playing
-                # Record the actual command
+                time.sleep(3)
                 command_path = record_user_command(duration=5)
-
-                # Send to pipeline
                 send_to_pipeline(command_path)
-
-                print("\n Back to listening for 'Bonjour Léa'...\n")
-                time.sleep(1)  # brief pause before listening again
+                print("\n👂 Back to listening...\n")
+                time.sleep(1)
 
         except KeyboardInterrupt:
-            print("\n Wake word detector stopped.")
+            print("\n Stopped.")
             break
         except Exception as e:
             print(f" Error: {e}")
             time.sleep(1)
-
-if __name__ == "__main__":
-    start_wake_word_detector()

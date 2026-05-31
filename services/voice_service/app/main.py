@@ -58,7 +58,12 @@ async def full_pipeline(file: UploadFile = File(...)):
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
                 "http://localhost:8001/chat",
-                json={"message": text}
+                json={
+                    "user_id": "00000000-0000-0000-0000-000000000001",
+                    "message": text,
+                    "emotion": "auto",
+                    "synthesize_voice": False
+                }
             )
             llm_response = response.json().get("response", "Je n'ai pas compris.")
     except Exception as e:
