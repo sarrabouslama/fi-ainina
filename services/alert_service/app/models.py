@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
+from app.enums import UserRole
+
 # ─────────────────────────────────────────────────────────────
 # Alert Event : Redis event structure (from P3, P4)
 # ─────────────────────────────────────────────────────────────
@@ -66,14 +68,14 @@ class AlertLogEntry(BaseModel):
 
 class AlertRecipient(BaseModel):
     """
-    Alert recipient for a monitored person (family or caregiver).
+    Alert recipient for a monitored person (caregiver).
     Derived from users + person_watchers tables.
     """
     user_id: UUID
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None  # if SMS enabled
-    role: str  # "family" | "caregiver" | "admin"
+    role: UserRole
 
     class Config:
         json_schema_extra = {

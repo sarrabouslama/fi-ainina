@@ -2,6 +2,7 @@ import pytest
 
 from app.models import User
 from app.security import hash_password
+from app.enums import UserRole
 
 
 @pytest.mark.asyncio
@@ -12,7 +13,7 @@ async def test_login_refresh_logout_and_me(client):
 
     me = await client.get('/auth/me', headers={'Authorization': f'Bearer {access}'})
     assert me.status_code == 200
-    assert me.json()['role'] == 'admin'
+    assert me.json()['role'] == UserRole.admin
     assert me.json()['consent_given'] is True
 
     refresh = await client.post('/auth/refresh')
@@ -40,7 +41,7 @@ async def test_auth_me_returns_false_when_consent_not_given(client, db_sessionma
                 email='noconsent@example.com',
                 hashed_password=hash_password('noconsentpass'),
                 full_name='No Consent',
-                role='elderly',
+                role=UserRole.elderly,
                 consent_given=False,
             )
         )

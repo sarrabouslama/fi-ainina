@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, redis_client
+from app.enums import UserRole
 from app.models import User
 from app.security import decode_token
 
@@ -33,9 +34,11 @@ async def get_current_user(
     return user
 
 
-def require_role(*roles: str):
+def require_role(*roles: UserRole | str):
+    allowed_roles = {role.value if isinstance(role, UserRole) else role for role in roles}
+
     async def _inner(user: User = Depends(get_current_user)) -> User:
-        if user.role not in roles:
+        if user.role.value not in allowed_roles:
             raise HTTPException(status_code=403, detail='Forbidden')
         return user
 

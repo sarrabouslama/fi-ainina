@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.models import Review, ReviewMessage, User
 from app.security import hash_password
+from app.enums import UserRole
 
 
 @pytest.mark.asyncio
@@ -18,7 +19,7 @@ async def test_caregiver_review_admin_reply_and_push_notification(client, admin_
                 email='caregiver@example.com',
                 hashed_password=hash_password('carepass'),
                 full_name='Care Giver',
-                role='caregiver',
+                role=UserRole.caregiver,
                 consent_given=True,
                 preferences={'assigned_user_ids': ['elder-1']},
             )

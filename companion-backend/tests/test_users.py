@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from app.models import Alert, ConversationMessage, ConversationSession, User
 from app.security import hash_password
+from app.enums import UserRole
 
 
 @pytest.mark.asyncio
@@ -17,7 +18,7 @@ async def test_users_crud_and_gdpr_erasure(client, admin_token, db_sessionmaker)
             'email': 'care@example.com',
             'password': 'secure',
             'full_name': 'Care Giver',
-            'role': 'caregiver',
+            'role': UserRole.caregiver,
             'preferences': {'assigned_user_ids': []},
         },
     )
@@ -58,7 +59,7 @@ async def test_dashboard_remains_read_only_without_consent(client, db_sessionmak
             email='noconsent@example.com',
             hashed_password=hash_password('noconsent'),
             full_name='No Consent',
-            role='elderly',
+            role=UserRole.elderly,
             consent_given=False,
         )
         db.add(user)

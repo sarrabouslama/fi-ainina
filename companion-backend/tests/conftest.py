@@ -16,6 +16,7 @@ from app.main import app
 from app.models import User
 from app.security import hash_password
 
+from app.enums import UserRole
 
 class FakeRedis:
     def __init__(self):
@@ -66,14 +67,14 @@ async def db_sessionmaker(monkeypatch):
             email='admin@example.com',
             hashed_password=hash_password('adminpass'),
             full_name='Admin',
-            role='admin',
+            role=UserRole.admin,
             consent_given=True,
         )
         elder = User(
             email='elder@example.com',
             hashed_password=hash_password('elderpass'),
             full_name='Elder',
-            role='elderly',
+            role=UserRole.elderly,
             consent_given=True,
         )
         session.add_all([admin, elder])

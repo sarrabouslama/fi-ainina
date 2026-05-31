@@ -30,6 +30,7 @@ from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import config
+from app.enums import UserRole
 from app.models import (
     AlertEvent, AlertHistoryResponse, AlertTestRequest, HealthCheckResponse, WebSocketMessage
 )
@@ -126,8 +127,8 @@ async def handle_alert(event: AlertEvent):
     tasks.append(ws_manager.broadcast(ws_message))
     channel_names.append("websocket")
     
-    # Email (to family members)
-    email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] == "family"]
+    # Email (to caregivers in the shared backend user schema)
+    email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] in {UserRole.caregiver, UserRole.admin}]
     if config.ENABLE_EMAIL and not email_recipients and config.ALERT_TEST_EMAIL_RECIPIENTS:
         logger.info("Using ALERT_TEST_EMAIL_RECIPIENTS fallback for email alert")
         email_recipients = config.ALERT_TEST_EMAIL_RECIPIENTS
@@ -137,7 +138,7 @@ async def handle_alert(event: AlertEvent):
         channel_names.append("email")
     
     # SMS / WhatsApp (to caregivers)
-    sms_recipients = [r.get("phone") for r in recipients if r.get("phone") and r["role"] in ["caregiver", "admin"]]
+    sms_recipients = [r.get("phone") for r in recipients if r.get("phone") and r["role"] == UserRole.caregiver]
     sms_recipients = [r for r in sms_recipients if r]  # Filter None values
     if (
         not sms_recipients
@@ -332,14 +333,13 @@ async def get_alert_history(
     try:
         async with db_session_factory() as session:
             # Get total count
-            count_result = await session.execute(text("SELECT COUNT(*) FROM alert_log WHERE deleted_at IS NULL"))
+            count_result = await session.execute(text("SELECT COUNT(*) FROM alert_log"))
             total = count_result.scalar()
             
             # Get paginated results
             query = text("""
                 SELECT id, event_type, channel, recipient, status, created_at
                 FROM alert_log
-                WHERE deleted_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT :limit OFFSET :offset
             """)
@@ -472,7 +472,7 @@ async def on_startup():
     ║                                                           ║
     ║  Notification channels:                                 ║
     ║    ✓ WebSocket (frontend, real-time)                    ║
-    ║    ✓ Email (family members)                             ║
+    ║    ✓ Email (caregivers)                             ║
     ║    ✓ SMS (caregivers, via Twilio)                       ║
     ║                                                           ║
     ║  Cooldown: {} min per event/user                        ║

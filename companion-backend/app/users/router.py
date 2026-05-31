@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import ConversationMessage, ConversationSession, User
 from app.security import hash_password
 from app.users.schemas import ConsentUpdate, UserCreate, UserResponse, UserUpdate
+from app.enums import UserRole
 
 
 router = APIRouter(prefix='/users', tags=['users'])
@@ -18,6 +19,7 @@ def to_response(user: User) -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
+        phone=user.phone,
         full_name=user.full_name,
         role=user.role,
         is_active=user.is_active,
@@ -27,13 +29,14 @@ def to_response(user: User) -> UserResponse:
     )
 
 
-@router.post('', response_model=UserResponse, dependencies=[Depends(require_role('admin'))])
+@router.post('', response_model=UserResponse, dependencies=[Depends(require_role(UserRole.admin))])
 async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=409, detail='Email exists')
     user = User(
         email=payload.email,
+        phone=payload.phone,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         role=payload.role,
@@ -45,7 +48,7 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     return to_response(user)
 
 
-@router.get('', response_model=list[UserResponse], dependencies=[Depends(require_role('admin'))])
+@router.get('', response_model=list[UserResponse], dependencies=[Depends(require_role(UserRole.admin))])
 async def list_users(db: AsyncSession = Depends(get_db)):
     users = (await db.execute(select(User))).scalars().all()
     return [to_response(u) for u in users]
@@ -53,7 +56,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 
 @router.get('/{user_id}', response_model=UserResponse)
 async def get_user(user_id: str, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role != 'admin' and current.id != user_id:
+    if current.role != UserRole.admin and current.id != user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
@@ -63,7 +66,7 @@ async def get_user(user_id: str, current: User = Depends(get_current_user), db: 
 
 @router.patch('/{user_id}', response_model=UserResponse)
 async def patch_user(user_id: str, payload: UserUpdate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role != 'admin' and current.id != user_id:
+    if current.role != UserRole.admin and (current.id != user_id or not current.consent_given):
         raise HTTPException(status_code=403, detail='Forbidden')
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
@@ -77,7 +80,7 @@ async def patch_user(user_id: str, payload: UserUpdate, current: User = Depends(
     return to_response(user)
 
 
-@router.delete('/{user_id}', dependencies=[Depends(require_role('admin'))])
+@router.delete('/{user_id}', dependencies=[Depends(require_role(UserRole.admin))])
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
@@ -89,7 +92,7 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post('/{user_id}/consent', response_model=UserResponse)
 async def update_consent(user_id: str, payload: ConsentUpdate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role != 'admin' and current.id != user_id:
+    if current.role != UserRole.admin and current.id != user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
@@ -102,7 +105,7 @@ async def update_consent(user_id: str, payload: ConsentUpdate, current: User = D
 
 
 @router.delete('/{user_id}/data')
-async def gdpr_erase(user_id: str, current: User = Depends(require_role('admin')), db: AsyncSession = Depends(get_db)):
+async def gdpr_erase(user_id: str, current: User = Depends(require_role(UserRole.admin)), db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail='Not found')

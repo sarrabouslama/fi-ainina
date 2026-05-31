@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from app.events.manager import WSContext, manager
+from app.enums import UserRole
 from app.security import decode_token
 
 
@@ -18,7 +19,7 @@ async def events_ws(websocket: WebSocket, token: str = Query(...)):
 
     context = WSContext(
         user_id=payload['sub'],
-        role=payload.get('role', 'elderly'),
+        role=UserRole(payload.get('role', UserRole.elderly.value)),
         assigned_user_ids=set(payload.get('assigned_user_ids', [])),
     )
     await manager.connect(websocket, context)
