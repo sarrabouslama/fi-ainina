@@ -130,7 +130,6 @@ class SMSHandler:
         """Compose alert message. Kept short so it also works well as SMS."""
         emoji_map = {
             "fall_detected": "🚨",
-            "fall_alert": "🚨",
             "emotion_distress": "😢",
             "extreme_redness_detected": "🚨",
             "inactivity_detected": "⏱️"

@@ -154,7 +154,7 @@ async def process_frames_background():
                 ev_type = det_event.get("event")
                 if ev_type == "fall":
                     fall_event_for_redis = {
-                        "event_type": "fall_detected",
+                        "event_type": "fall",
                         "user_id": settings.default_person_id,
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                         "severity": det_event.get("severity", "high"),
@@ -166,13 +166,16 @@ async def process_frames_background():
                             "detector": det_event,
                         }
                     }
-                    publish_fall_event(fall_event_for_redis)
+                    # Default behavior: do not publish transient 'fall'
+                    # events to Redis (external systems). Keep broadcasting to
+                    # local WebSocket clients so the UI still sees immediate
+                    # detections, but only escalate via Redis on 'fall_detected'.
                     await broadcast_alert(fall_event_for_redis)
 
-                elif ev_type == "fall_alert":
+                elif ev_type == "fall_detected":
                     duration = det_event.get("duration_lying_seconds", 0)
                     alert_event_for_redis = {
-                        "event_type": "fall_alert",
+                        "event_type": "fall_detected",
                         "user_id": settings.default_person_id,
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                         "severity": "critical" if duration > 30 else ("high" if duration > 10 else "high"),
@@ -300,7 +303,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WebSocket endpoint for real-time fall events.
     
     Connects and sends:
-    - fall_detected events
+    - fall events
     - alert events  
     - recovery events
     """

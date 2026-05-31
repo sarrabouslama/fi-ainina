@@ -365,7 +365,7 @@ class TestIntegration:
         import json
 
         event = parse_alert_event(json.dumps({
-            "event_type": "fall_alert",
+            "event_type": "fall_detected",
             "user_id": "elder_001",
             "timestamp": "2026-05-31T12:00:00Z",
             "severity": "critical",
@@ -374,11 +374,11 @@ class TestIntegration:
                 "duration_seconds": 31.5,
                 "posture": "lying",
                 "signals": {"angle": True},
-                "detector": {"event": "fall_alert"},
+                "detector": {"event": "fall_detected"},
             },
         }))
 
-        assert event.event_type == "fall_alert"
+        assert event.event_type == "fall_detected"
         assert event.severity == "critical"
         assert event.metadata["duration_seconds"] == 31.5
 

@@ -246,22 +246,20 @@ class FallDetector:
           ANY      → STABLE (if recovery: standing/sitting again)
         """
         # ── HYSTERESIS: Prevent false recovery from posture misclassification ───
-        # If in FALLEN/ALERT state and posture momentarily shows SITTING,
-        # but the last few frames were LYING, keep the LYING classification.
-        # This prevents momentary angle-based misclassification from exiting fallen state.
-        
+        # If the person is already down, a momentary SITTING label should not
+        # immediately clear the fall state or cancel the alert timer.
         if self.state in (FallState.FALLEN, FallState.ALERT) and posture == "sitting":
-            # Check if we were recently LYING (last 3 frames)
             recent_postures = [snap.posture for snap in list(self.history)[-3:] if snap.posture == "lying"]
-            if recent_postures:
+            if recent_postures or self.fall_detected_at is not None:
                 debug_print(
-                    f"[FALL_DETECT] HYSTERESIS: Posture is SITTING but recent LYING detected → override to LYING",
+                    f"[FALL_DETECT] HYSTERESIS: Posture is SITTING but down state is active → override to LYING",
                     tag="FALL_DETECT"
                 )
-                posture = "lying"  # Override the momentary misclassification
-        
-        # Recovery: if person is standing/sitting again → back to STABLE
-        if posture in ("standing", "sitting"):
+                posture = "lying"
+
+        # Recovery: standing or unknown posture means we should clear the
+        # fall sequence. Unknown is treated as "no reliable person posture".
+        if posture in ("standing", "unknown"):
             if self.state != FallState.STABLE:
                 debug_print(
                     f"[FALL_DETECT] Recovery: person is {posture} again → STABLE",
@@ -290,11 +288,12 @@ class FallDetector:
                 self.state_entered_at = t_now
         
         elif self.state == FallState.FALLING:
-            # Transition to FALLEN if person is lying and not intentional
-            if posture == "lying":
+            # Transition to FALLEN if person ends up down on the ground and the
+            # transition was not intentional.
+            if posture in ("lying", "sitting"):
                 if not self._is_intentional_lie_down(t_now):
                     debug_print(
-                        f"[FALL_DETECT] Fast collapse ended in LYING → FALLEN (not intentional)",
+                        f"[FALL_DETECT] Fast collapse ended in {posture.upper()} → FALLEN (not intentional)",
                         tag="FALL_DETECT"
                     )
                     self.state = FallState.FALLEN
@@ -339,7 +338,7 @@ class FallDetector:
                     )
                     self.alert_triggered_at = t_now
                     return {
-                        "event": "fall_alert",
+                        "event": "fall_detected",
                         "timestamp": t_now,
                         "duration_lying_seconds": time_lying,
                     }

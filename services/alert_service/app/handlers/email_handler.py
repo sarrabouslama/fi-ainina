@@ -86,7 +86,6 @@ class EmailHandler:
 
         event_type_label = {
             "fall_detected": "🚨 Chute détectée",
-            "fall_alert": "🚨 Alerte de chute prolongée",
             "emotion_distress": "😢 Détresse émotionnelle",
             "extreme_redness_detected": "🚨 Rougeur faciale extrême",
             "inactivity_detected": "⏱️ Inactivité prolongée"
