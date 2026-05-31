@@ -15,6 +15,8 @@ from app.handlers.cooldown_manager import CooldownManager
 from app.handlers.websocket_handler import ConnectionManager
 from app.handlers.email_handler import EmailHandler
 from app.handlers.sms_handler import SMSHandler
+from app.subscriber import ALERT_CHANNELS, parse_alert_event
+from app.database import get_alert_recipients
 
 
 # ─────────────────────────────────────────────────────────────
@@ -78,6 +80,17 @@ class TestCooldownManager:
         mock_redis.setex.assert_called_once()
         call_args = mock_redis.setex.call_args
         assert "cooldown:user_001:fall_detected" in str(call_args)
+
+    @pytest.mark.asyncio
+    async def test_zero_cooldown_disables_deduplication(self, cooldown_manager, mock_redis):
+        """A zero-minute cooldown should allow repeated local workflow tests."""
+        cooldown_manager.cooldown_minutes = 0
+
+        assert await cooldown_manager.can_send_alert("user_001", "fall_detected") is True
+        await cooldown_manager.record_alert_sent("user_001", "fall_detected")
+
+        mock_redis.get.assert_not_called()
+        mock_redis.setex.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -340,6 +353,74 @@ class TestIntegration:
         
         assert event.event_type == "fall_detected"
         assert event.severity == "high"
+
+    def test_subscriber_channels_include_upstream_publishers(self):
+        """Alert service should subscribe to every upstream Redis channel."""
+        assert "fall_events" in ALERT_CHANNELS
+        assert "emotion_events" in ALERT_CHANNELS
+        assert "inactivity_events" in ALERT_CHANNELS
+
+    def test_parse_fall_detection_payload(self):
+        """Parse the payload shape published by fall_detection_service."""
+        import json
+
+        event = parse_alert_event(json.dumps({
+            "event_type": "fall_alert",
+            "user_id": "elder_001",
+            "timestamp": "2026-05-31T12:00:00Z",
+            "severity": "critical",
+            "confidence": 0.91,
+            "metadata": {
+                "duration_seconds": 31.5,
+                "posture": "lying",
+                "signals": {"angle": True},
+                "detector": {"event": "fall_alert"},
+            },
+        }))
+
+        assert event.event_type == "fall_alert"
+        assert event.severity == "critical"
+        assert event.metadata["duration_seconds"] == 31.5
+
+    def test_parse_emotion_service_payloads(self):
+        """Parse emotion and inactivity payloads from emotion_service.publisher."""
+        import json
+
+        emotion = parse_alert_event(json.dumps({
+            "event_type": "extreme_redness_detected",
+            "user_id": "elder_001",
+            "timestamp": "2026-05-31T12:00:00Z",
+            "severity": "high",
+            "confidence": 1.0,
+            "metadata": {
+                "redness_score": 0.94,
+                "redness_level": "extreme",
+                "message": "Extreme facial redness detected",
+            },
+        }))
+        inactivity = parse_alert_event(json.dumps({
+            "event_type": "inactivity_detected",
+            "user_id": "elder_001",
+            "timestamp": "2026-05-31T12:05:00Z",
+            "severity": "medium",
+            "confidence": 1.0,
+            "metadata": {"duration_seconds": 1800},
+        }))
+
+        assert emotion.event_type == "extreme_redness_detected"
+        assert emotion.metadata["redness_level"] == "extreme"
+        assert inactivity.event_type == "inactivity_detected"
+        assert inactivity.metadata["duration_seconds"] == 1800
+
+    @pytest.mark.asyncio
+    async def test_non_uuid_person_id_skips_database_lookup(self):
+        """Demo IDs like elder_001 should use configured fallbacks without DB errors."""
+        session = AsyncMock()
+
+        recipients = await get_alert_recipients(session, "elder_001")
+
+        assert recipients == []
+        session.execute.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────

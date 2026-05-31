@@ -54,6 +54,15 @@ async def get_alert_recipients(session: AsyncSession, person_id: str) -> list[di
     Returns list of dicts with: {user_id, name, email, phone, role}
     """
     try:
+        UUID(str(person_id))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Skipping database recipient lookup for non-UUID person_id %r; using configured fallbacks",
+            person_id,
+        )
+        return []
+
+    try:
         query = text("""
             SELECT 
                 u.id as user_id,

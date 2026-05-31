@@ -22,6 +22,9 @@ async def main():
     if not recipients:
         raise SystemExit("Set ALERT_TEST_WHATSAPP_RECIPIENTS or TEST_WHATSAPP_TO first.")
 
+    if not config.TWILIO_WHATSAPP_FROM.startswith("whatsapp:"):
+        raise SystemExit("Set TWILIO_WHATSAPP_FROM to a value like whatsapp:+14155238886.")
+
     handler = SMSHandler()
     handler.channel = "whatsapp"
     handler.twilio_from = config.TWILIO_WHATSAPP_FROM
@@ -39,7 +42,9 @@ async def main():
     if sent:
         print("WhatsApp alert sent. Check your phone.")
     else:
-        raise SystemExit("WhatsApp send failed. Check Twilio sandbox setup and logs.")
+        raise SystemExit(
+            "WhatsApp send failed. Check Twilio credentials, sandbox join status, recipient, and logs."
+        )
 
 
 if __name__ == "__main__":

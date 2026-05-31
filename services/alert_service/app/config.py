@@ -9,8 +9,16 @@ def _env_bool(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_first(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value.strip().strip('"').strip("'")
+    return default
+
+
 def _env_list(name: str) -> list[str]:
-    return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
+    return [value.strip().strip('"').strip("'") for value in os.getenv(name, "").split(",") if value.strip()]
 
 # ─────────────────────────────────────────────────────────────
 # Configuration : Alert Service
@@ -19,6 +27,11 @@ def _env_list(name: str) -> list[str]:
 
 # Redis
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+ALERT_REDIS_CHANNELS = _env_list("ALERT_REDIS_CHANNELS") or [
+    "fall_events",
+    "emotion_events",
+    "inactivity_events",
+]
 
 # PostgreSQL (for alert_log and user lookups)
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/fi_ainina")
@@ -36,11 +49,14 @@ SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT", "30"))
 ALERT_TEST_EMAIL_RECIPIENTS = _env_list("ALERT_TEST_EMAIL_RECIPIENTS")
 
 # SMS / WhatsApp (Twilio)
-TWILIO_SID = os.getenv("TWILIO_SID", "")
-TWILIO_TOKEN = os.getenv("TWILIO_TOKEN", "")
-TWILIO_FROM = os.getenv("TWILIO_FROM", "")  # Twilio phone number (e.g., +1234567890)
+TWILIO_SID = _env_first("TWILIO_ACCOUNT_SID", "TWILIO_SID")
+TWILIO_TOKEN = _env_first("TWILIO_AUTH_TOKEN", "TWILIO_TOKEN")
+TWILIO_FROM = _env_first("TWILIO_FROM", "TWILIO_PHONE_NUMBER")  # Twilio phone number (e.g., +1234567890)
 TWILIO_CHANNEL = os.getenv("TWILIO_CHANNEL", "sms").strip().lower()
 TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+TWILIO_SSL_VERIFY = _env_bool("TWILIO_SSL_VERIFY", "true")
+TWILIO_CA_BUNDLE = _env_first("TWILIO_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE")
+ALERT_TEST_SMS_RECIPIENTS = _env_list("ALERT_TEST_SMS_RECIPIENTS")
 ALERT_TEST_WHATSAPP_RECIPIENTS = _env_list("ALERT_TEST_WHATSAPP_RECIPIENTS")
 
 # Alert Configuration

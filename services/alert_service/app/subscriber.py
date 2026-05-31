@@ -20,7 +20,27 @@ from app import config
 logger = logging.getLogger(__name__)
 
 # Channels to listen to
-ALERT_CHANNELS = ["fall_events", "emotion_events", "inactivity_events"]
+ALERT_CHANNELS = config.ALERT_REDIS_CHANNELS
+
+
+def parse_alert_event(data: str) -> AlertEvent:
+    """Parse one Redis pub/sub message into the alert-service event model."""
+    event_dict = json.loads(data)
+    if not isinstance(event_dict, dict):
+        raise ValueError("Redis alert payload must be a JSON object")
+
+    metadata = event_dict.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {"value": metadata}
+
+    return AlertEvent(
+        event_type=event_dict.get("event_type"),
+        user_id=event_dict.get("user_id"),
+        timestamp=event_dict.get("timestamp"),
+        severity=event_dict.get("severity"),
+        confidence=event_dict.get("confidence"),
+        metadata=metadata,
+    )
 
 
 async def redis_subscriber(redis: AsyncRedis, handle_alert_callback):
@@ -50,18 +70,8 @@ async def redis_subscriber(redis: AsyncRedis, handle_alert_callback):
             logger.debug(f"Received message on channel {channel}")
             
             try:
-                # Parse JSON event into dic
-                event_dict = json.loads(data)
-                
                 # Validate and create AlertEvent
-                event = AlertEvent(
-                    event_type=event_dict.get("event_type"),
-                    user_id=event_dict.get("user_id"),
-                    timestamp=event_dict.get("timestamp"),
-                    severity=event_dict.get("severity"),
-                    confidence=event_dict.get("confidence"),
-                    metadata=event_dict.get("metadata", {})
-                )
+                event = parse_alert_event(data)
                 
                 logger.info(
                     f"Parsed alert: {event.event_type} from {event.user_id} "

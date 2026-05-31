@@ -78,6 +78,7 @@ class EmailHandler:
 
         # Create HTML body
         severity_color = {
+            "critical": "#7f1d1d",  # dark red
             "high": "#dc3545",  # red
             "medium": "#ffc107",  # yellow
             "low": "#28a745"  # green
@@ -85,7 +86,9 @@ class EmailHandler:
 
         event_type_label = {
             "fall_detected": "🚨 Chute détectée",
+            "fall_alert": "🚨 Alerte de chute prolongée",
             "emotion_distress": "😢 Détresse émotionnelle",
+            "extreme_redness_detected": "🚨 Rougeur faciale extrême",
             "inactivity_detected": "⏱️ Inactivité prolongée"
         }.get(event.event_type, event.event_type)
 
