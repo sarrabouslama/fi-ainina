@@ -2,7 +2,7 @@ from openai import AsyncOpenAI
 from typing import List, Dict
 from app.config import settings
 from app.memory import get_short_term_memory, add_message_to_memory
-from app.external_services import get_long_term_facts
+from app.external_services import get_long_term_facts, save_conversation_turn
 
 # We use the OpenAI client because Ollama provides an OpenAI-compatible API.
 # Just point the base_url to the Ollama server.
@@ -47,5 +47,6 @@ async def generate_chat_response(user_id: str, message: str, emotion: str) -> st
     # 6. Save new messages to memory
     await add_message_to_memory(user_id, "user", message)
     await add_message_to_memory(user_id, "assistant", assistant_reply)
+    await save_conversation_turn(user_id, message, assistant_reply)
     
     return assistant_reply
