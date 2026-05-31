@@ -19,7 +19,7 @@ VOICE_SERVICE_URL = "http://localhost:8002"
 
 # ── Load Whisper once ──────────────────────────────────────
 print(" Loading Whisper for wake word detection...")
-model = whisper.load_model("tiny")  # tiny = fastest for wake word
+model = whisper.load_model("base") 
 print(" Wake word detector ready — say 'Bonjour Léa' to activate!")
 
 def record_chunk(duration: int = CHUNK_DURATION) -> str:
