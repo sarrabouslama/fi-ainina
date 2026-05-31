@@ -10,12 +10,16 @@ import time
 # ── Settings ──────────────────────────────────────────────
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 3        # seconds to record each chunk
-WAKE_WORDS = ["bonjour léa", "bonjour lea", "bonjour lé", "bonjour la"]
+WAKE_WORDS = [
+    "bonjour léa", "bonjour lea", "bonjour lé", "bonjour la",
+    "bonjour là", "bonjour les", "bonjour l", "bon jour léa",
+    "bonsoir léa", "bonsoir lea", "bonjour léas", "bonjour léah"
+]
 VOICE_SERVICE_URL = "http://localhost:8002"
 
 # ── Load Whisper once ──────────────────────────────────────
 print(" Loading Whisper for wake word detection...")
-model = whisper.load_model("tiny")  # tiny = fastest for wake word
+model = whisper.load_model("base") 
 print(" Wake word detector ready — say 'Bonjour Léa' to activate!")
 
 def record_chunk(duration: int = CHUNK_DURATION) -> str:
@@ -40,7 +44,7 @@ def is_wake_word(audio_path: str) -> bool:
 
 def record_user_command(duration: int = 5) -> str:
     """Record user command after wake word detected."""
-    print("🎙️ Listening for your command...")
+    print(" Listening for your command...")
     audio = sd.rec(
         int(duration * SAMPLE_RATE),
         samplerate=SAMPLE_RATE,
@@ -82,13 +86,17 @@ def start_wake_word_detector():
             # Record a short chunk
             audio_path = record_chunk(CHUNK_DURATION)
 
-            # Check for wake word
+            
+            
             if is_wake_word(audio_path):
                 print("\n Wake word detected! Léa is listening...")
 
-                # Play activation sound feedback
-                os.system('powershell -c (New-Object Media.SoundPlayer).PlaySync()')
-
+                # Léa speaks to confirm she's ready
+        
+                from app.tts import speak
+                speak("Oui, je vous écoute. Posez votre question.", "ready.wav")
+                os.system("start ready.wav")
+                time.sleep(3)  # wait for audio to finish playing
                 # Record the actual command
                 command_path = record_user_command(duration=5)
 
