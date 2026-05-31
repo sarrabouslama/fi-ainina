@@ -1,6 +1,6 @@
 # Makefile — Alert Service Development Commands
 
-.PHONY: help install test test-unit test-integration test-cov dev logs clean
+.PHONY: help install test test-unit test-integration test-cov dev logs clean test-email test-sms test-whatsapp
 
 help:
 	@echo "Alert Service — Development Commands"
@@ -13,6 +13,9 @@ help:
 	@echo "make test-unit      — Run unit tests only"
 	@echo "make test-cov       — Run tests with coverage report"
 	@echo "make test-alert     — Send test alert via API"
+	@echo "make test-email     — Send test email via SMTP"
+	@echo "make test-sms       — Send test SMS via Twilio"
+	@echo "make test-whatsapp  — Send test WhatsApp via Twilio"
 	@echo "make redis-cli      — Connect to Redis CLI"
 	@echo "make psql           — Connect to PostgreSQL"
 	@echo "make clean          — Clean up containers and volumes"
@@ -86,4 +89,4 @@ format:
 lint:
 	pylint app/
 
-.PHONY: help install dev logs test test-unit test-cov test-alert test-health redis-cli psql clean format lint
+.PHONY: help install dev logs test test-unit test-cov test-alert test-email test-sms test-whatsapp test-health redis-cli psql clean format lint

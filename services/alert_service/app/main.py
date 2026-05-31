@@ -49,6 +49,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+logging.getLogger("twilio").setLevel(logging.WARNING)
+logging.getLogger("twilio.http_client").setLevel(logging.WARNING)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -87,7 +89,11 @@ async def handle_alert(event: AlertEvent):
     
     # Step 1: Check cooldown
     if not await cooldown_manager.can_send_alert(event.user_id, event.event_type):
-        logger.debug(f"Alert skipped due to cooldown: {event.event_type}/{event.user_id}")
+        logger.info(
+            "Alert skipped due to cooldown: %s/%s",
+            event.event_type,
+            event.user_id,
+        )
         try:
             ALERTS_SKIPPED.labels(event_type=event.event_type).inc()
         except Exception:
@@ -122,11 +128,11 @@ async def handle_alert(event: AlertEvent):
     
     # Email (to family members)
     email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] == "family"]
-    if not email_recipients and config.ALERT_TEST_EMAIL_RECIPIENTS:
+    if config.ENABLE_EMAIL and not email_recipients and config.ALERT_TEST_EMAIL_RECIPIENTS:
         logger.info("Using ALERT_TEST_EMAIL_RECIPIENTS fallback for email alert")
         email_recipients = config.ALERT_TEST_EMAIL_RECIPIENTS
 
-    if email_recipients:
+    if config.ENABLE_EMAIL and email_recipients:
         tasks.append(email_handler.send_alert(event, email_recipients))
         channel_names.append("email")
     

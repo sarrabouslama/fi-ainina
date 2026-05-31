@@ -4,7 +4,9 @@ Twilio Handler : send alert notifications via SMS or WhatsApp.
 
 import logging
 from typing import List
+from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
+from twilio.http.http_client import TwilioHttpClient
 
 from app.models import AlertEvent
 from app import config
@@ -27,13 +29,33 @@ class SMSHandler:
         self.enabled = config.ENABLE_SMS
         
         if self.enabled and self.twilio_sid and self.twilio_token:
-            self.client = Client(self.twilio_sid, self.twilio_token)
+            http_client = self._build_http_client()
+            self.client = Client(self.twilio_sid, self.twilio_token, http_client=http_client)
         else:
             self.client = None
 
     @property
     def channel_name(self) -> str:
         return "whatsapp" if self.channel == "whatsapp" else "sms"
+
+    def _mask_recipient(self, recipient: str) -> str:
+        if len(recipient) <= 6:
+            return "***"
+        return f"{recipient[:4]}...{recipient[-2:]}"
+
+    def _build_http_client(self):
+        """Build a Twilio HTTP client only when TLS settings need customization."""
+        if config.TWILIO_SSL_VERIFY and not config.TWILIO_CA_BUNDLE:
+            return None
+
+        http_client = TwilioHttpClient()
+        if config.TWILIO_CA_BUNDLE:
+            http_client.session.verify = config.TWILIO_CA_BUNDLE
+        else:
+            logger.warning("Twilio SSL verification is disabled. Use only for local testing.")
+            http_client.session.verify = False
+
+        return http_client
 
     async def send_alert(self, event: AlertEvent, recipients: List[str]) -> bool:
         """
@@ -72,10 +94,21 @@ class SMSHandler:
                     from_=self.twilio_from,
                     to=formatted_recipient
                 )
-                logger.info(f"{self.channel_name.upper()} sent to {formatted_recipient} (SID: {msg.sid})")
+                logger.info(
+                    f"{self.channel_name.upper()} sent to {self._mask_recipient(formatted_recipient)} "
+                    f"(SID: {msg.sid})"
+                )
                 success_count += 1
+            except TwilioRestException as e:
+                logger.error(
+                    f"Failed to send {self.channel_name} to {self._mask_recipient(formatted_recipient)}: "
+                    f"Twilio HTTP {e.status} - {e.msg}"
+                )
             except Exception as e:
-                logger.error(f"Failed to send {self.channel_name} to {formatted_recipient}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send {self.channel_name} to {self._mask_recipient(formatted_recipient)}: {e}"
+                )
+                logger.debug("Twilio send failure details", exc_info=True)
 
         if success_count == len(recipients):
             logger.info(f"All {success_count} {self.channel_name} messages sent successfully for {event.event_type}")
@@ -97,7 +130,9 @@ class SMSHandler:
         """Compose alert message. Kept short so it also works well as SMS."""
         emoji_map = {
             "fall_detected": "🚨",
+            "fall_alert": "🚨",
             "emotion_distress": "😢",
+            "extreme_redness_detected": "🚨",
             "inactivity_detected": "⏱️"
         }
         emoji = emoji_map.get(event.event_type, "⚠️")

@@ -50,6 +50,10 @@ class CooldownManager:
         key = self._get_cooldown_key(user_id, event_type)
         
         try:
+            if self.cooldown_minutes <= 0:
+                logger.debug("Cooldown disabled; allowing alert for %s:%s", user_id, event_type)
+                return True
+
             # Get last alert timestamp
             last_timestamp_str = await self._resolve(self.redis.get(key))
             
@@ -90,6 +94,10 @@ class CooldownManager:
         now = datetime.utcnow().isoformat()
         
         try:
+            if self.cooldown_minutes <= 0:
+                logger.debug("Cooldown disabled; not recording alert for %s:%s", user_id, event_type)
+                return
+
             # Set timestamp with TTL = 2x cooldown (for cleanup)
             ttl_seconds = self.cooldown_minutes * 60 * 2
             await self._resolve(self.redis.setex(key, ttl_seconds, now))
