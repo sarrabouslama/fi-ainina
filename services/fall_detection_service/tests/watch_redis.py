@@ -42,7 +42,7 @@ def main():
                     event = json.loads(message["data"])
                     
                     print(f"\n📬 Event: {event['event_type'].upper()}")
-                    print(f"   User ID:    {event['user_id']}")
+                    """ print(f"   User ID:    {event['user_id']}")
                     print(f"   Severity:   {event['severity']}")
                     print(f"   Confidence: {event['confidence']}")
                     print(f"   Timestamp:  {event['timestamp']}")
@@ -57,7 +57,7 @@ def main():
                                     print(f"       {k}: {v}")
                             else:
                                 print(f"     {key}: {value}")
-                    
+                     """
                     print("=" * 70)
                     
                 except json.JSONDecodeError:

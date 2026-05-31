@@ -23,6 +23,7 @@ import sys
 import os
 import argparse
 import time
+from datetime import datetime
 import cv2
 import numpy as np
 
@@ -37,6 +38,7 @@ if REPO_ROOT not in sys.path:
 # ── Project imports ───────────────────────────────────────────────────────────
 from app.config import settings
 from app.core.utils.debug_utils import enable_debug
+from app.core.redis_publisher import publish_fall_event
 
 # Pose
 from app.core.analysis.fall_detector import FallDetector, FallState
@@ -110,6 +112,29 @@ def _panel_bg(img, x, y, w, h, alpha=0.55):
     overlay = img.copy()
     cv2.rectangle(overlay, (x, y), (x + w, y + h), C["panel_bg"], -1)
     cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
+
+
+def _publish_demo_event(event_type: str, result, det_event: dict) -> None:
+    """Publish demo events to the same Redis channel used by the service."""
+    if event_type == "fall_detected":
+        duration = det_event.get("duration_lying_seconds", 0)
+        payload = {
+            "event_type": "fall_detected",
+            "user_id": settings.default_person_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "severity": "critical" if duration > 30 else ("high" if duration > 10 else "high"),
+            "confidence": round(result.confidence.score, 3),
+            "metadata": {
+                "duration_seconds": round(duration, 2),
+                "posture": result.posture,
+                "signals": result.confidence.signals,
+                "detector": det_event,
+            },
+        }
+    else:
+        return
+
+    publish_fall_event(payload)
 
 
 def _state_badge(img, text, x, y, color):
@@ -314,8 +339,11 @@ def run_demo(source, debug_mode: bool = False):
         result = fall_analyzer.analyze(frame)
 
         # Update detector state machine using analyzer outputs
-        fall_detector.process_frame(result.posture, result.body_angle_deg, result.vsr)
+        det_event = fall_detector.process_frame(result.posture, result.body_angle_deg, result.vsr)
         fall_state = fall_detector.state
+
+        if det_event:
+            _publish_demo_event(det_event.get("event"), result, det_event)
 
         annotated = result.annotated_frame if result.annotated_frame is not None else frame
 
