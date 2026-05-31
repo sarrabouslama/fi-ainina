@@ -57,10 +57,6 @@ test-email:
 	@echo "Running SMTP email test script..."
 	python app/scripts/test_email.py
 
-test-sms:
-	@echo "Running Twilio SMS test script..."
-	python app/scripts/test_sms.py
-
 test-whatsapp:
 	@echo "Running Twilio WhatsApp test script..."
 	python app/scripts/test_whatsapp.py

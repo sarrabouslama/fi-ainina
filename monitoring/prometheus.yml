@@ -8,6 +8,12 @@ scrape_configs:
   - job_name: 'llm_service'
     static_configs:
       - targets: ['llm_service:8001']
+  - job_name: 'voice_service'
+    static_configs:
+      - targets: ['voice_service:8002']
+  - job_name: 'emotion_service'
+    static_configs:
+      - targets: ['emotion_service:8004']
   - job_name: 'alert_service'
     static_configs:
       - targets: ['alert_service:8005']
