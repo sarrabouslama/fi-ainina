@@ -98,7 +98,7 @@ def analyze_response(text: str):
 
 def handle_fall_event(data: dict):
     event_type = data.get("event_type", "unknown")
-    person_id = data.get("person_id", "unknown")
+    person_id = data.get("user_id") or data.get("person_id") or "unknown"
 
     print(f" Fall event received! type={event_type} person={person_id}")
 

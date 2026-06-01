@@ -65,16 +65,22 @@ export default function VoicePage() {
     if (!hasSpeech || micListening) return
     const rec = new SpeechRecognition()
     rec.lang = 'fr-FR'
-    rec.interimResults = false
+    rec.interimResults = true
     rec.maxAlternatives = 1
     recognitionRef.current = rec
 
     rec.onstart = () => setMicListening(true)
-    rec.onend = () => setMicListening(false)
-    rec.onerror = () => setMicListening(false)
+    rec.onend = () => { setMicListening(false); setInterimTranscript('') }
+    rec.onerror = () => { setMicListening(false); setInterimTranscript('') }
     rec.onresult = (e) => {
-      const transcript = e.results[0][0].transcript
-      setText(transcript)
+      const results = Array.from(e.results)
+      const interim = results.map(r => r[0].transcript).join('')
+      setInterimTranscript(interim)
+      const last = results[results.length - 1]
+      if (last.isFinal) {
+        setInterimTranscript('')
+        setText(last[0].transcript)
+      }
     }
     rec.start()
   }, [hasSpeech, micListening, SpeechRecognition])
