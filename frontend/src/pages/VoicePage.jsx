@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
-import { Send, Volume2, Mic, Loader2, RefreshCw } from 'lucide-react'
+import { Send, Volume2, Mic, Loader2, RefreshCw, Bot, AlertTriangle } from 'lucide-react'
 
 export default function VoicePage() {
   const [text, setText] = useState('')
@@ -26,7 +26,7 @@ export default function VoicePage() {
           { responseType: 'blob', timeout: 15000 })
         const url = URL.createObjectURL(res.data)
         new Audio(url).play()
-        setHistory(h => [...h, { role: 'lea', text: `🔊 Audio généré pour: "${userMsg}"` }])
+        setHistory(h => [...h, { role: 'lea', text: `Audio généré pour: "${userMsg}"` }])
       } else {
         const res = await axios.post('http://localhost:8001/chat', {
           user_id: '00000000-0000-0000-0000-000000000001',
@@ -103,7 +103,10 @@ export default function VoicePage() {
           <div className="flex-1 overflow-y-auto flex flex-col gap-3 mb-4 pr-1">
             {history.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
-                <div className="text-5xl mb-3 animate-float">🤖</div>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
+                  style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <Bot size={32} style={{ color: 'var(--green)' }} />
+                </div>
                 <p className="font-display font-semibold text-white mb-1">Bonjour ! Je suis Léa</p>
                 <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
                   Écrivez un message ou utilisez les phrases rapides
@@ -115,8 +118,10 @@ export default function VoicePage() {
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-up`}>
                   {msg.role !== 'user' && (
                     <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2 flex-shrink-0 mt-0.5"
-                      style={{ background: msg.role === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(45,138,67,0.2)' }}>
-                      {msg.role === 'error' ? '⚠️' : '🤖'}
+                      style={{ background: msg.role === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.15)' }}>
+                      {msg.role === 'error'
+                        ? <AlertTriangle size={14} style={{ color: '#f87171' }} />
+                        : <Bot size={14} style={{ color: 'var(--green)' }} />}
                     </div>
                   )}
                   <div className="max-w-xs px-4 py-3 rounded-2xl text-sm"
@@ -139,7 +144,9 @@ export default function VoicePage() {
             {loading && (
               <div className="flex justify-start animate-fade-up">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm mr-2"
-                  style={{ background: 'rgba(45,138,67,0.2)' }}>🤖</div>
+                  style={{ background: 'rgba(16,185,129,0.15)' }}>
+                  <Bot size={14} style={{ color: 'var(--green)' }} />
+                </div>
                 <div className="px-4 py-3 rounded-2xl flex items-center gap-2"
                   style={{ background: 'rgba(14,61,24,0.6)', border: '1px solid var(--border)' }}>
                   <Loader2 size={14} className="animate-spin" style={{ color: 'var(--green-light)' }} />

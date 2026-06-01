@@ -48,7 +48,7 @@ export default function ReviewsPage() {
   }
 
   const STATUS_COLORS = { open: 'var(--warn)', replied: 'var(--ok)', closed: 'var(--muted)' }
-  const TYPE_ICONS = { general: '💬', alert_review: '🚨', feedback: '⭐', support: '🔧' }
+  const TYPE_LABELS = { general: 'Général', alert_review: 'Alerte', feedback: 'Feedback', support: 'Support' }
 
   return (
     <div className="p-8 max-w-5xl">
@@ -81,10 +81,10 @@ export default function ReviewsPage() {
                 <select className="input-field" value={newReview.review_type}
                   onChange={e => setNewReview(p => ({ ...p, review_type: e.target.value }))}
                   style={{ cursor: 'pointer' }}>
-                  <option value="general">💬 Général</option>
-                  <option value="alert_review">🚨 Revue d'alerte</option>
-                  <option value="feedback">⭐ Feedback</option>
-                  <option value="support">🔧 Support</option>
+                  <option value="general">Général</option>
+                  <option value="alert_review">Revue d'alerte</option>
+                  <option value="feedback">Feedback</option>
+                  <option value="support">Support</option>
                 </select>
               </div>
             </div>
@@ -131,7 +131,7 @@ export default function ReviewsPage() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs">{TYPE_ICONS[r.review_type] || '💬'}</span>
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>{TYPE_LABELS[r.review_type] || 'Général'}</span>
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>
                   {r.messages?.length || 0} message(s)
                 </span>
@@ -163,7 +163,7 @@ export default function ReviewsPage() {
                   </span>
                 </div>
                 <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  {TYPE_ICONS[selected.review_type]} {selected.review_type}
+                  {TYPE_LABELS[selected.review_type] || selected.review_type}
                 </p>
               </div>
 

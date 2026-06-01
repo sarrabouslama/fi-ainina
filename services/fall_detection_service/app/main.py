@@ -20,10 +20,10 @@ from typing import Optional, Dict, List
 from datetime import datetime
 
 from app.config import settings
-from services.fall_detection_service.app.core.analysis.fall_analysis_pipeline import fall_analyzer
-from services.fall_detection_service.app.core.vision.video_capture import video_capture
-from services.fall_detection_service.app.core.analysis.fall_detector import FallState, FallDetector
-from services.fall_detection_service.app.core.utils.debug_utils import debug_print
+from app.core.analysis.fall_analysis_pipeline import fall_analyzer
+from app.core.vision.video_capture import video_capture
+from app.core.analysis.fall_detector import FallState, FallDetector
+from app.core.utils.debug_utils import debug_print
 from app.core.redis_publisher import publish_fall_event, get_redis_client
 
 

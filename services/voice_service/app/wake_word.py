@@ -28,7 +28,6 @@ def listen_for_wake_word():
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
         print(" Listening for 'Bonjour Léa'... (beep when ready)")
-        os.system('powershell -c "[console]::beep(800,200)"')
         try:
             audio = recognizer.listen(source, timeout=5, phrase_time_limit=4)
             text = recognizer.recognize_google(audio, language="fr-FR").lower()
@@ -47,7 +46,6 @@ def listen_for_wake_word():
 def record_user_command(duration: int = 5) -> str:
     """Record user command using sounddevice."""
     print("🎙️ Listening for your command...")
-    os.system('powershell -c "[console]::beep(1000,300)"')
     audio = sd.rec(
         int(duration * SAMPLE_RATE),
         samplerate=SAMPLE_RATE,

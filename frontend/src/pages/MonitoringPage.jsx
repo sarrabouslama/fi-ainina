@@ -44,7 +44,7 @@ export default function MonitoringPage() {
                   FALLEN: 'var(--danger)',
                   ALERT: '#dc2626',
                 }
-                const icons = { STABLE: '🟢', FALLING: '⚠️', FALLEN: '🚨', ALERT: '🆘' }
+                const icons = { STABLE: '●', FALLING: '▲', FALLEN: '■', ALERT: '!' }
                 return (
                   <div key={state} className="flex items-center gap-3 p-3 rounded-xl transition-all"
                     style={{
@@ -75,7 +75,6 @@ export default function MonitoringPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-2xl mb-2">📷</p>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>Service non disponible</p>
             </div>
           )}
@@ -88,7 +87,6 @@ export default function MonitoringPage() {
           </h3>
           {fallEvents.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-2xl mb-2">🌿</p>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>Aucun événement</p>
             </div>
           ) : (

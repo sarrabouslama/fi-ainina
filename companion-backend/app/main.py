@@ -31,7 +31,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(settings.dashboard_origin)],
+    allow_origins=[
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -65,12 +72,17 @@ async def shutdown():
 
 
 async def health_poller():
-    llm = AsyncServiceClient(settings.llm_base_url)
-    voice = AsyncServiceClient(settings.voice_base_url)
+    clients = {
+        'llm':            AsyncServiceClient(settings.llm_base_url),
+        'voice_assistant': AsyncServiceClient(settings.voice_base_url),
+        'fall_detection': AsyncServiceClient('http://127.0.0.1:8003'),
+        'emotion':        AsyncServiceClient('http://127.0.0.1:8004'),
+        'alerts':         AsyncServiceClient('http://127.0.0.1:8005'),
+    }
     previous = dict(health_state.status)
     try:
         while True:
-            for name, client in (('llm', llm), ('voice_assistant', voice)):
+            for name, client in clients.items():
                 start = time.perf_counter()
                 status = 'healthy'
                 try:
@@ -83,11 +95,10 @@ async def health_poller():
                 if previous.get(name) != status:
                     await manager.broadcast({'type': 'service_health_change', 'payload': {'service': name, 'status': status}})
                 previous[name] = status
-            health_state.status['alerts'] = 'healthy'
             await asyncio.sleep(30)
     finally:
-        await llm.close()
-        await voice.close()
+        for c in clients.values():
+            await c.close()
 
 
 @limiter.limit('100/minute')

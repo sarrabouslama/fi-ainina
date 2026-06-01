@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth, AuthProvider } from './context/AuthContext'
 import { useWebSocket } from './hooks/useWebSocket'
-import Sidebar from './components/Sidebar'
+import TopNav from './components/TopNav'
 
-// Pages
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import ElderlyHome from './pages/ElderlyHome'
 import Dashboard from './pages/Dashboard'
 import VoicePage from './pages/VoicePage'
 import AlertsPage from './pages/AlertsPage'
@@ -14,111 +14,103 @@ import ConversationsPage from './pages/ConversationsPage'
 import UsersPage from './pages/UsersPage'
 import ReviewsPage from './pages/ReviewsPage'
 
-// Auth guard
-function RequireAuth({ children }) {
+function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth()
   const location = useLocation()
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="text-center">
-        <img src="/logo.png" alt="logo" className="w-16 h-16 object-contain mx-auto mb-4 animate-float" />
+        <img src="/logo.png" alt="logo" className="w-20 h-20 object-contain mx-auto mb-4 animate-float" />
         <p className="text-sm" style={{ color: 'var(--muted)' }}>Chargement...</p>
       </div>
     </div>
   )
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
+  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />
   return children
 }
 
-// Layout with sidebar
 function AppLayout({ children, wsConnected }) {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar wsConnected={wsConnected} />
-      <main className="flex-1 ml-64 min-h-screen overflow-y-auto">
+    <div className="min-h-screen">
+      <TopNav wsConnected={wsConnected} />
+      <main className="pt-14 min-h-screen overflow-y-auto">
         {children}
       </main>
     </div>
   )
 }
 
+function RootRedirect() {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role === 'elderly') return <Navigate to="/home" replace />
+  return <Navigate to="/dashboard" replace />
+}
+
 function InnerApp() {
-  const { token } = useAuth()
-
-  // Connect to companion backend WebSocket with auth token
-  const wsUrl = token ? `ws://localhost:8000/ws/events?token=${token}` : null
+  const { token, user } = useAuth()
+  const wsUrl = token ? `ws://127.0.0.1:8000/ws/events?token=${token}` : null
   const { messages: backendEvents, connected: backendWsConnected } = useWebSocket(wsUrl)
+  const { messages: alertMessages, connected: alertWsConnected } = useWebSocket('ws://127.0.0.1:8005/ws')
 
-  // Also connect to alert service WebSocket for real-time alerts
-  const { messages: alertMessages, connected: alertWsConnected } = useWebSocket('ws://localhost:8005/ws')
-
-  // Combine all WebSocket messages as alerts
   const allAlerts = [...alertMessages, ...backendEvents.filter(m => m.type === 'alert_escalated' || m.payload)]
-    .map(m => m.payload || m)
-    .slice(0, 100)
-
+    .map(m => m.payload || m).slice(0, 100)
   const wsConnected = backendWsConnected || alertWsConnected
 
   return (
     <Routes>
       {/* Public */}
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login"    element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
-      {/* Protected */}
+      {/* Elderly-only home */}
+      <Route path="/home" element={
+        <RequireAuth roles={['elderly']}>
+          <ElderlyHome />
+        </RequireAuth>
+      } />
+
+      {/* Staff/admin pages */}
       <Route path="/dashboard" element={
-        <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <Dashboard alerts={allAlerts} />
-          </AppLayout>
+        <RequireAuth roles={['admin', 'caregiver']}>
+          <AppLayout wsConnected={wsConnected}><Dashboard alerts={allAlerts} /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/voice" element={
         <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <VoicePage />
-          </AppLayout>
+          <AppLayout wsConnected={wsConnected}><VoicePage /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/alerts" element={
-        <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <AlertsPage alerts={allAlerts} />
-          </AppLayout>
+        <RequireAuth roles={['admin', 'caregiver']}>
+          <AppLayout wsConnected={wsConnected}><AlertsPage alerts={allAlerts} /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/monitoring" element={
-        <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <MonitoringPage />
-          </AppLayout>
+        <RequireAuth roles={['admin', 'caregiver']}>
+          <AppLayout wsConnected={wsConnected}><MonitoringPage /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/conversations" element={
         <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <ConversationsPage />
-          </AppLayout>
+          <AppLayout wsConnected={wsConnected}><ConversationsPage /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/users" element={
-        <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <UsersPage />
-          </AppLayout>
+        <RequireAuth roles={['admin']}>
+          <AppLayout wsConnected={wsConnected}><UsersPage /></AppLayout>
         </RequireAuth>
       } />
       <Route path="/reviews" element={
         <RequireAuth>
-          <AppLayout wsConnected={wsConnected}>
-            <ReviewsPage />
-          </AppLayout>
+          <AppLayout wsConnected={wsConnected}><ReviewsPage /></AppLayout>
         </RequireAuth>
       } />
 
-      {/* Default */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   )
 }
