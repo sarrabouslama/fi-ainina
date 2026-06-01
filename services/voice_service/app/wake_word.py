@@ -90,6 +90,55 @@ def send_to_pipeline(audio_path: str):
         print(f" Impossible de joindre le service: {e}")
 
 
+STOP_PHRASES = ["au revoir", "bonne nuit", "arrête", "stop", "merci au revoir", "au revoir léa"]
+
+
+def run_conversation():
+    """One continuous conversation session after wake word detected."""
+    from app.tts import speak
+
+    speak("Oui, je vous écoute.", "ready.wav")
+    play_audio_sync("ready.wav")
+    time.sleep(0.4)
+
+    consecutive_silence = 0
+
+    while consecutive_silence < 2:
+        command_path = record_user_command(duration=7)
+
+        # Quick check: did the user say a stop phrase or nothing?
+        try:
+            with sr.AudioFile(command_path) as source:
+                audio_data = recognizer.record(source)
+            heard = recognizer.recognize_google(audio_data, language="fr-FR").lower().strip()
+            print(f"   commande: '{heard}'")
+
+            if any(stop in heard for stop in STOP_PHRASES):
+                speak("Au revoir, prenez soin de vous.", "ready.wav")
+                play_audio_sync("ready.wav")
+                print(" Conversation terminée.\n")
+                return
+
+            consecutive_silence = 0
+
+        except sr.UnknownValueError:
+            consecutive_silence += 1
+            print(f"   (incompris — {consecutive_silence}/2)")
+            continue
+        except sr.RequestError:
+            consecutive_silence += 1
+            continue
+
+        # Send command to LLM pipeline (STT → LLM → TTS, plays response)
+        send_to_pipeline(command_path)
+
+        # Small pause after Léa responds before listening again
+        time.sleep(0.3)
+        print("👂 Je vous écoute toujours...")
+
+    print(" Fin de conversation (silence détecté).\n")
+
+
 def start_wake_word_detector():
     print(" Dites 'Bonjour Léa' pour activer!")
     print("   (Ctrl+C pour arrêter)\n")
@@ -97,26 +146,9 @@ def start_wake_word_detector():
     while True:
         try:
             if listen_for_wake_word():
-                print("\n Mot-clé détecté! Génération de la réponse vocale...")
-
-                from app.tts import speak
-                # Generate the "ready" audio
-                speak("Oui, je vous écoute.", "ready.wav")
-
-                # Play it synchronously — microphone is NOT recording yet
-                play_audio_sync("ready.wav")
-
-                # Brief pause so user knows it's their turn
-                time.sleep(0.4)
-
-                # NOW record the user's command (TTS is already silent)
-                command_path = record_user_command(duration=7)
-
-                # Send to LLM pipeline and play response
-                send_to_pipeline(command_path)
-
-                print("\n👂 Retour à l'écoute...\n")
-                time.sleep(0.5)
+                print("\n Mot-clé détecté! Démarrage de la conversation...")
+                run_conversation()
+                print("👂 En attente du mot-clé...\n")
 
         except KeyboardInterrupt:
             print("\n Arrêté.")
