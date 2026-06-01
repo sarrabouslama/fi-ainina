@@ -134,13 +134,13 @@ export default function VoicePage() {
       setHistory(h => [...h, { role: 'lea', text: reply, emotion: detectedEmotion }])
       setStreamingReply('')
 
-      // Save conversation directly from frontend — doesn't depend on LLM service DB config
+      // Save conversation directly from frontend
       if (reply && user?.id) {
         axios.post('http://127.0.0.1:8000/conversations/save', {
           user_id: user.id,
           user_message: userMsg,
           assistant_reply: reply,
-        }).catch(() => {})
+        }).catch(err => console.error('Conversation save failed:', err.response?.status, err.message))
       }
 
       if (reply) {
