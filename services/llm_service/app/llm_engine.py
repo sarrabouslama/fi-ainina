@@ -1,8 +1,11 @@
+import logging
 from openai import AsyncOpenAI
 from typing import AsyncGenerator
 from app.config import settings
 from app.memory import get_short_term_memory, add_message_to_memory
 from app.external_services import get_long_term_facts, save_conversation_turn
+
+logger = logging.getLogger(__name__)
 
 # We use the OpenAI client because Ollama provides an OpenAI-compatible API.
 # Just point the base_url to the Ollama server.
@@ -70,19 +73,26 @@ async def stream_chat_response(user_id: str, message: str, emotion: str) -> Asyn
     messages.append({"role": "user", "content": message})
 
     full_reply = ""
-    stream = await client.chat.completions.create(
-        model=settings.llm_model,
-        messages=messages,
-        temperature=0.3,
-        max_tokens=100,
-        stream=True,
-    )
+    try:
+        stream = await client.chat.completions.create(
+            model=settings.llm_model,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=100,
+            stream=True,
+        )
+    except Exception as e:
+        logger.error("Ollama connection failed (model=%s, url=%s): %s", settings.llm_model, settings.ollama_url, e)
+        raise
 
     async for chunk in stream:
         token = chunk.choices[0].delta.content or ""
         if token:
             full_reply += token
             yield token
+
+    if not full_reply:
+        logger.warning("Ollama returned no tokens (model=%s) — is the model pulled?", settings.llm_model)
 
     if full_reply:
         await add_message_to_memory(user_id, "user", message)

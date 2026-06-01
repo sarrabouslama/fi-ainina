@@ -53,19 +53,30 @@ def speak_text(input: TextInput):
     return FileResponse(output_path, media_type="audio/wav")
 
 COMPANION_URL = "http://127.0.0.1:8000"
-_cached_elderly_user_id: str | None = None
+LLM_URL = "http://localhost:8001"
+_last_user_id: str | None = None
 
 async def get_elderly_user_id() -> str:
-    """Fetch the active elderly user's ID from the companion backend."""
-    global _cached_elderly_user_id
-    if _cached_elderly_user_id:
-        return _cached_elderly_user_id
+    """Fetch the currently connected elderly user. Flushes stale memory on user switch."""
+    global _last_user_id
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(f"{COMPANION_URL}/internal/elderly-user-id")
             if r.status_code == 200:
-                _cached_elderly_user_id = r.json().get("user_id")
-                return _cached_elderly_user_id
+                data = r.json()
+                user_id = data.get("user_id")
+                full_name = data.get("full_name")
+                if user_id:
+                    print(f" Active elderly user: {full_name} ({user_id})")
+                    if _last_user_id and _last_user_id != user_id:
+                        # User changed — clear stale conversation memory
+                        try:
+                            await client.delete(f"{LLM_URL}/memory/{_last_user_id}")
+                            print(f" Cleared memory for previous user {_last_user_id}")
+                        except Exception:
+                            pass
+                    _last_user_id = user_id
+                    return user_id
     except Exception as e:
         print(f" Could not fetch elderly user id: {e}")
     return "00000000-0000-0000-0000-000000000001"
@@ -85,6 +96,7 @@ async def full_pipeline(file: UploadFile = File(...)):
     user_id = await get_elderly_user_id()
 
     # Step 2: send to LLM service via streaming endpoint (more resilient)
+    import json as _json
     llm_response = None
     try:
         async with httpx.AsyncClient(timeout=90) as client:
@@ -93,23 +105,27 @@ async def full_pipeline(file: UploadFile = File(...)):
                 "http://localhost:8001/chat/stream",
                 json={"user_id": user_id, "message": text, "emotion": "auto"},
             ) as resp:
+                print(f" LLM service HTTP {resp.status_code}")
                 full = ""
                 async for line in resp.aiter_lines():
                     if line.startswith("data: "):
-                        import json as _json
                         try:
                             chunk = _json.loads(line[6:])
                             if chunk.get("token"):
                                 full += chunk["token"]
+                            elif chunk.get("error"):
+                                print(f" LLM error chunk: {chunk['error']}")
                         except Exception:
                             pass
                 if full.strip():
                     llm_response = full.strip()
+                else:
+                    print(" LLM stream finished with no tokens")
     except Exception as e:
         print(f" LLM streaming failed: {e}")
 
     if not llm_response:
-        print(" LLM gave no response — service may be down or Redis is dropping")
+        print(" LLM gave no response — check: is Ollama running? Is 'llama3' model pulled?")
         llm_response = "Je suis désolée, je n'arrive pas à répondre pour le moment. Veuillez réessayer."
 
     print(f" LLM response: {llm_response}")
