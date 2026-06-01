@@ -47,6 +47,10 @@ class ConnectionManager:
         if ctx.role == UserRole.admin:
             return True
         if ctx.role == UserRole.caregiver:
+            # Emergency alerts always reach caregivers regardless of assignment
+            # (assigned_user_ids in JWT is not yet populated at login)
+            if event.get('type') == 'alert_escalated':
+                return True
             return not user_id or user_id in ctx.assigned_user_ids
         return user_id == ctx.user_id
 

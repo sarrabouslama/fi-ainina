@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID as _UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -30,12 +31,22 @@ async def receive_fall_alert(payload: FallAlertPayload, db: AsyncSession = Depen
     """Called directly by the voice service when a fall is detected and processed."""
     now = datetime.now(timezone.utc)
 
-    # Find the active elderly user to attach the alert to
-    elderly = (await db.execute(
-        select(User)
-        .where(User.role == UserRole.elderly, User.is_active == True)
-        .order_by(User.created_at.desc())
-    )).scalars().first()
+    # Find the monitored user: try payload person_id first, fall back to oldest elderly
+    elderly = None
+    if payload.person_id and payload.person_id != 'unknown':
+        try:
+            _UUID(payload.person_id)
+            elderly = (await db.execute(
+                select(User).where(User.id == payload.person_id)
+            )).scalar_one_or_none()
+        except (ValueError, TypeError):
+            pass
+    if not elderly:
+        elderly = (await db.execute(
+            select(User)
+            .where(User.role == UserRole.elderly, User.is_active == True)
+            .order_by(User.created_at.asc())
+        )).scalars().first()
 
     severity = 'critical' if payload.action_required == 'emergency' else \
                'high' if payload.action_required == 'verify' else 'low'
