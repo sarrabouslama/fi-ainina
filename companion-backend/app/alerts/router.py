@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,78 @@ from app.models import Alert, User
 
 
 router = APIRouter(prefix='/alerts', tags=['alerts'])
+
+
+class FallAlertPayload(BaseModel):
+    event_type: str
+    person_id: str | None = 'unknown'
+    person_status: str
+    action_required: str
+    responded: bool = False
+    response_text: str | None = None
+    message_for_family: str | None = None
+
+
+@router.post('/fall')
+async def receive_fall_alert(payload: FallAlertPayload, db: AsyncSession = Depends(get_db)):
+    """Called directly by the voice service when a fall is detected and processed."""
+    now = datetime.now(timezone.utc)
+
+    # Find the active elderly user to attach the alert to
+    elderly = (await db.execute(
+        select(User)
+        .where(User.role == UserRole.elderly, User.is_active == True)
+        .order_by(User.created_at.desc())
+    )).scalars().first()
+
+    severity = 'critical' if payload.action_required == 'emergency' else \
+               'high' if payload.action_required == 'verify' else 'low'
+
+    resident_name = elderly.full_name if elderly else 'Le résident'
+
+    # Enrich message with the resident's real name
+    enriched_message = payload.message_for_family or ''
+    if elderly and 'La personne' in enriched_message:
+        enriched_message = enriched_message.replace('La personne', resident_name)
+
+    if elderly:
+        alert = Alert(
+            user_id=elderly.id,
+            alert_type=payload.event_type,
+            severity=severity,
+            status='pending',
+            triggered_at=now,
+            metadata_json={
+                'source': 'fall_detection',
+                'person_status': payload.person_status,
+                'response_text': payload.response_text,
+                'message_for_family': enriched_message,
+                'message': f'{resident_name} — chute détectée ({payload.person_status})',
+            },
+        )
+        db.add(alert)
+        await db.commit()
+        await db.refresh(alert)
+        alert_id = alert.id
+    else:
+        alert_id = None
+
+    # Broadcast immediately to all connected staff via WebSocket
+    await manager.broadcast({
+        'type': 'alert_escalated',
+        'payload': {
+            'event_type': payload.event_type,
+            'person_status': payload.person_status,
+            'full_name': resident_name,
+            'action_required': payload.action_required,
+            'severity': severity,
+            'response_text': f'{resident_name} — {payload.response_text}' if payload.response_text else None,
+            'message_for_family': enriched_message,
+            '_ts': now.isoformat(),
+            'alert_id': alert_id,
+        }
+    })
+    return {'ok': True, 'alert_id': alert_id}
 
 
 @router.get('')

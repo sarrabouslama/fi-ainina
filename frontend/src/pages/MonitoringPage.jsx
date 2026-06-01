@@ -13,6 +13,7 @@ function ElderlyMonitoring() {
   const [activeCamera, setActiveCamera] = useState(null)
   const [cameraLoading, setCameraLoading] = useState(false)
   const [cameraError, setCameraError] = useState(null)
+  const [feedError, setFeedError] = useState(false)
 
   const toggleCamera = async (on) => {
     setCameraLoading(true)
@@ -30,6 +31,7 @@ function ElderlyMonitoring() {
           axios.post('http://127.0.0.1:8004/camera/stop', {}, { timeout: 3000 }),
         ])
         setActiveCamera(null)
+        setFeedError(false)
       }
     } catch {
       setCameraError('Impossible d\'accéder à la caméra. Vérifiez la connexion.')
@@ -102,6 +104,38 @@ function ElderlyMonitoring() {
           </button>
         </div>
       </div>
+
+      {/* Live camera feeds */}
+      {activeCamera && (
+        <div className="glass rounded-2xl overflow-hidden mb-5 animate-fade-up">
+          <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'rgba(45,120,45,0.12)' }}>
+            <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: 'var(--danger)' }} />
+            <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Flux caméra en direct</p>
+          </div>
+          <div className="grid grid-cols-2" style={{ background: '#000' }}>
+            {/* Fall detection feed */}
+            <div style={{ position: 'relative', borderRight: '1px solid #222' }}>
+              <p className="text-xs font-semibold px-2 py-1 absolute top-0 left-0 z-10"
+                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                Détection chute
+              </p>
+              <img src={FEED_URLS.fall} alt="Chute"
+                onError={e => e.currentTarget.style.display = 'none'}
+                style={{ width: '100%', display: 'block', minHeight: 180 }} />
+            </div>
+            {/* Emotion detection feed */}
+            <div style={{ position: 'relative' }}>
+              <p className="text-xs font-semibold px-2 py-1 absolute top-0 left-0 z-10"
+                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                Émotion
+              </p>
+              <img src={FEED_URLS.emotion} alt="Émotion"
+                onError={e => e.currentTarget.style.display = 'none'}
+                style={{ width: '100%', display: 'block', minHeight: 180 }} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="glass rounded-2xl p-5 animate-fade-up delay-100">
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
