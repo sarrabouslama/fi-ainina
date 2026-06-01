@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.events.manager import WSContext, manager
 from app.enums import UserRole
@@ -13,9 +13,12 @@ async def events_ws(websocket: WebSocket, token: str = Query(...)):
     try:
         payload = decode_token(token)
         if payload.get('type') != 'access':
-            raise ValueError('wrong token')
+            raise ValueError('wrong token type')
     except Exception:
-        raise HTTPException(status_code=401, detail='Invalid token')
+        # Must accept first before closing — closing without accept sends HTTP 403
+        await websocket.accept()
+        await websocket.close(code=4001)
+        return
 
     context = WSContext(
         user_id=payload['sub'],

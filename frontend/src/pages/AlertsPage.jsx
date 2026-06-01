@@ -1,7 +1,7 @@
 import AlertFeed from '../components/AlertFeed'
 
-export default function AlertsPage({ alerts }) {
-  const emergency = alerts.filter(a => a.action_required === 'emergency' || a.person_status === 'needs_help')
+export default function AlertsPage({ alerts, onResolveAlert }) {
+  const emergency = alerts.filter(a => a.status !== 'resolved' && (a.action_required === 'emergency' || a.person_status === 'needs_help'))
   const verify = alerts.filter(a => a.action_required === 'verify' || a.person_status === 'unclear')
   const info = alerts.filter(a => a.action_required === 'notify_only' || a.person_status === 'okay')
 
@@ -39,7 +39,7 @@ export default function AlertsPage({ alerts }) {
             style={{ color: 'var(--danger)' }}>
             🚨 Urgences ({emergency.length})
           </h3>
-          <AlertFeed alerts={emergency} maxHeight="none" />
+          <AlertFeed alerts={emergency} maxHeight="none" onResolve={onResolveAlert} />
         </div>
       )}
 
@@ -47,7 +47,7 @@ export default function AlertsPage({ alerts }) {
         <h3 className="font-display font-semibold text-sm text-white mb-3">
           Toutes les alertes ({alerts.length})
         </h3>
-        <AlertFeed alerts={alerts} maxHeight="500px" />
+        <AlertFeed alerts={alerts} maxHeight="500px" onResolve={onResolveAlert} />
       </div>
     </div>
   )

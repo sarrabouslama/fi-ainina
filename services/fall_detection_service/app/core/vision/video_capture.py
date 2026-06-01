@@ -83,7 +83,7 @@ class VideoCapture:
                 f"Opening camera index={settings.camera_index} "
                 f"{settings.camera_width}x{settings.camera_height} @ {settings.camera_fps}fps"
             )
-            self.cap = cv2.VideoCapture(settings.camera_index)
+            self.cap = cv2.VideoCapture(settings.camera_index, cv2.CAP_DSHOW)
             self._is_video_file = False
 
             if not self.cap.isOpened():

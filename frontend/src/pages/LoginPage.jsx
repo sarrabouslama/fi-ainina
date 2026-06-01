@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
@@ -46,7 +46,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Big logo — centered, no text beside it */}
         <div className="flex flex-col items-center mb-8">
-          <h1 className="font-arabic text-4xl font-bold text-gradient mb-1">في عينينا</h1>
+          <h1 className="font-arabic text-4xl font-bold text-gradient" style={{ lineHeight: 1.6, paddingBottom: '4px' }}>في عينينا</h1>
           <p className="text-sm" style={{ color: 'var(--muted)' }}>elderly companion ai</p>
         </div>
 
@@ -100,10 +100,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div style={{ height: 1, background: 'rgba(99,179,237,0.1)', margin: '24px 0' }} />
-          <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>
-            Pas encore de compte ?{' '}
-            <Link to="/register" className="font-semibold" style={{ color: 'var(--green-light)' }}>S'inscrire</Link>
+          <div style={{ height: 1, background: 'rgba(45,120,45,0.1)', margin: '24px 0' }} />
+          <p className="text-center text-xs" style={{ color: 'var(--muted)' }}>
+            Contactez votre administrateur pour créer un compte.
           </p>
         </div>
       </div>

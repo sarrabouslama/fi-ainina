@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
-import { UserPlus, Trash2, Shield, Heart, User, Loader2 } from 'lucide-react'
+import { UserPlus, Trash2, Shield, Loader2, ChevronDown, ChevronUp, Link2, X } from 'lucide-react'
 
 const ROLE_CONFIG = {
-  elderly: { icon: '👴', label: 'Personne âgée', color: '#78c98e' },
-  caregiver: { icon: '👩‍⚕️', label: 'Soignant', color: '#60a5fa' },
-  admin: { icon: '⚙️', label: 'Administrateur', color: '#c9a84c' },
-  family: { icon: '👨‍👩‍👧', label: 'Famille', color: '#f9a8d4' },
+  elderly:   { label: 'Personne âgée',  color: '#78c98e' },
+  caregiver: { label: 'Soignant',       color: '#60a5fa' },
+  admin:     { label: 'Administrateur', color: '#c9a84c' },
 }
 
 export default function UsersPage() {
@@ -18,6 +17,8 @@ export default function UsersPage() {
   const [form, setForm] = useState({ email: '', password: '', full_name: '', phone: '', role: 'elderly' })
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  const [expandedCaregiver, setExpandedCaregiver] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   const isAdmin = me?.role === 'admin'
 
@@ -64,11 +65,29 @@ export default function UsersPage() {
     try { await axios.post(`${API}/users/${id}/consent`, { consent_given: value }); fetchUsers() } catch {}
   }
 
+  const getAssignedIds = (caregiver) =>
+    caregiver.preferences?.assigned_user_ids || []
+
+  const toggleAssignment = async (caregiver, elderlyId) => {
+    setSaving(true)
+    const isAssigned = getAssignedIds(caregiver).includes(elderlyId)
+    try {
+      if (isAssigned) {
+        await axios.delete(`${API}/users/${caregiver.id}/assign/${elderlyId}`)
+      } else {
+        await axios.post(`${API}/users/${caregiver.id}/assign/${elderlyId}`)
+      }
+      fetchUsers()
+    } catch {} finally { setSaving(false) }
+  }
+
+  const elderlyUsers = users.filter(u => u.role === 'elderly')
+
   return (
     <div className="p-8 max-w-5xl">
       <div className="flex items-center justify-between mb-8 animate-fade-up">
         <div>
-          <h1 className="font-display text-3xl font-bold text-white mb-1">Utilisateurs</h1>
+          <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>Utilisateurs</h1>
           <p className="text-sm" style={{ color: 'var(--text2)' }}>
             Gestion des comptes · RGPD · Consentements
           </p>
@@ -84,7 +103,7 @@ export default function UsersPage() {
       {/* Create form */}
       {showForm && isAdmin && (
         <div className="glass rounded-2xl p-6 mb-6 animate-slide-down">
-          <h3 className="font-display font-semibold text-white mb-4">Créer un utilisateur</h3>
+          <h3 className="font-display font-semibold mb-4" style={{ color: 'var(--text)' }}>Créer un utilisateur</h3>
           <form onSubmit={handleCreate} className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Nom complet</label>
@@ -109,11 +128,11 @@ export default function UsersPage() {
                   <button key={key} type="button" onClick={() => setForm(p => ({ ...p, role: key }))}
                     className="flex-1 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all"
                     style={{
-                      background: form.role === key ? `${cfg.color}20` : 'rgba(7,43,14,0.4)',
-                      border: `1px solid ${form.role === key ? cfg.color + '50' : 'var(--border)'}`,
+                      background: form.role === key ? `${cfg.color}20` : 'rgba(255,255,255,0.5)',
+                      border: `1px solid ${form.role === key ? cfg.color + '50' : 'rgba(45,120,45,0.15)'}`,
                       color: form.role === key ? cfg.color : 'var(--muted)',
                     }}>
-                    {cfg.icon} {cfg.label}
+                    {cfg.label}
                   </button>
                 ))}
               </div>
@@ -145,7 +164,6 @@ export default function UsersPage() {
           <div className="text-center py-16">
             <p className="text-3xl mb-2">👥</p>
             <p className="text-sm" style={{ color: 'var(--muted)' }}>Aucun utilisateur</p>
-            {!isAdmin && <p className="text-xs mt-1" style={{ color: 'var(--border2)' }}>Accès administrateur requis</p>}
           </div>
         ) : (
           <table className="data-table">
@@ -153,84 +171,154 @@ export default function UsersPage() {
               <tr>
                 <th>Utilisateur</th>
                 <th>Rôle</th>
-                <th>Consentement</th>
+                <th>
+                  Consentement
+                  <span className="ml-1 font-normal text-xs" style={{ color: 'var(--muted)' }}>(RGPD)</span>
+                </th>
                 <th>Alertes actives</th>
                 {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {users.map((u, i) => {
-                const cfg = ROLE_CONFIG[u.role] || ROLE_CONFIG.family
+                const cfg = ROLE_CONFIG[u.role] || ROLE_CONFIG.elderly
+                const isCaregiver = u.role === 'caregiver'
+                const isExpanded = expandedCaregiver === u.id
+                const assignedIds = getAssignedIds(u)
+
                 return (
-                  <tr key={u.id} className="animate-fade-up" style={{ animationDelay: `${i * 0.04}s` }}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                          style={{ background: `${cfg.color}20`, color: cfg.color }}>
-                          {u.full_name?.[0] || '?'}
-                        </div>
-                        <div>
-                          <p className="font-medium text-white text-sm">{u.full_name}</p>
-                          <p className="text-xs" style={{ color: 'var(--muted)' }}>{u.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                        style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}30` }}>
-                        {cfg.icon} {cfg.label}
-                      </span>
-                    </td>
-                    <td>
-                      {isAdmin ? (
-                        <button onClick={() => handleConsent(u.id, !u.consent_given)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
-                          style={{
-                            background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                            color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
-                            border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                          }}>
-                          {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                        </button>
-                      ) : (
-                        <span style={{ color: u.consent_given ? 'var(--ok)' : 'var(--danger)', fontSize: 12 }}>
-                          {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="font-bold" style={{ color: u.active_alerts > 0 ? 'var(--danger)' : 'var(--muted)' }}>
-                        {u.active_alerts ?? '—'}
-                      </span>
-                    </td>
-                    {isAdmin && (
+                  <>
+                    <tr key={u.id} className="animate-fade-up" style={{ animationDelay: `${i * 0.04}s` }}>
                       <td>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleGdprErase(u.id)}
-                            title="Effacer données RGPD"
-                            className="p-1.5 rounded-lg transition-all"
-                            style={{ color: 'var(--muted)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = '#f59e0b'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
-                            <Shield size={13} />
-                          </button>
-                          <button onClick={() => handleDelete(u.id)}
-                            title="Supprimer"
-                            className="p-1.5 rounded-lg transition-all"
-                            style={{ color: 'var(--muted)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
-                            <Trash2 size={13} />
-                          </button>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                            style={{ background: `${cfg.color}20`, color: cfg.color }}>
+                            {u.full_name?.[0] || '?'}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>{u.full_name}</p>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>{u.email}</p>
+                          </div>
                         </div>
                       </td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                          style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}30` }}>
+                          {cfg.label}
+                        </span>
+                      </td>
+                      <td>
+                        {isAdmin ? (
+                          <button onClick={() => handleConsent(u.id, !u.consent_given)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
+                            style={{
+                              background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                              color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
+                              border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                            }}>
+                            {u.consent_given ? '✓ Donné' : '✗ Refusé'}
+                          </button>
+                        ) : (
+                          <span style={{ color: u.consent_given ? 'var(--ok)' : 'var(--danger)', fontSize: 12 }}>
+                            {u.consent_given ? '✓ Donné' : '✗ Refusé'}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span className="font-bold" style={{ color: u.active_alerts > 0 ? 'var(--danger)' : 'var(--muted)' }}>
+                          {u.active_alerts ?? '—'}
+                        </span>
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          <div className="flex items-center gap-1">
+                            {isCaregiver && (
+                              <button
+                                onClick={() => setExpandedCaregiver(isExpanded ? null : u.id)}
+                                title="Gérer les patients assignés"
+                                className="p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-medium"
+                                style={{ color: isExpanded ? 'var(--green)' : 'var(--muted)', background: isExpanded ? 'rgba(30,107,46,0.08)' : 'transparent' }}
+                                onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.color = 'var(--teal)' }}
+                                onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.color = 'var(--muted)' }}>
+                                <Link2 size={13} />
+                                {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                              </button>
+                            )}
+                            <button onClick={() => handleGdprErase(u.id)}
+                              title="Effacer données RGPD"
+                              className="p-1.5 rounded-lg transition-all"
+                              style={{ color: 'var(--muted)' }}
+                              onMouseEnter={e => e.currentTarget.style.color = '#f59e0b'}
+                              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
+                              <Shield size={13} />
+                            </button>
+                            <button onClick={() => handleDelete(u.id)}
+                              title="Supprimer"
+                              className="p-1.5 rounded-lg transition-all"
+                              style={{ color: 'var(--muted)' }}
+                              onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+                              onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+
+                    {/* Caregiver assignment panel */}
+                    {isAdmin && isCaregiver && isExpanded && (
+                      <tr key={`${u.id}-assign`}>
+                        <td colSpan={5} style={{ padding: '0 12px 12px', background: 'rgba(30,107,46,0.03)' }}>
+                          <div className="rounded-xl p-4" style={{ border: '1px solid rgba(30,107,46,0.15)', background: 'rgba(255,255,255,0.5)' }}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-xs font-semibold" style={{ color: 'var(--text2)' }}>
+                                Patients assignés à <span style={{ color: '#60a5fa' }}>{u.full_name}</span>
+                              </p>
+                              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                                Cliquez pour assigner / désassigner
+                              </p>
+                            </div>
+                            {elderlyUsers.length === 0 ? (
+                              <p className="text-xs" style={{ color: 'var(--muted)' }}>Aucun patient enregistré</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {elderlyUsers.map(el => {
+                                  const assigned = assignedIds.includes(el.id)
+                                  return (
+                                    <button key={el.id}
+                                      disabled={saving}
+                                      onClick={() => toggleAssignment(u, el.id)}
+                                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                                      style={{
+                                        background: assigned ? 'rgba(120,201,142,0.15)' : 'rgba(255,255,255,0.7)',
+                                        border: `1px solid ${assigned ? '#78c98e' : 'rgba(45,120,45,0.15)'}`,
+                                        color: assigned ? '#2e7d40' : 'var(--muted)',
+                                        opacity: saving ? 0.6 : 1,
+                                      }}>
+                                      {assigned ? '✓' : '+'} {el.full_name}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </tr>
+                  </>
                 )
               })}
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Consent explanation */}
+      <div className="mt-4 px-4 py-3 rounded-xl animate-fade-up delay-200"
+        style={{ background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(45,120,45,0.1)' }}>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="font-semibold" style={{ color: 'var(--text2)' }}>Consentement RGPD</span> — Le consentement indique que l'utilisateur a accepté la collecte et le traitement de ses données personnelles pour la surveillance et l'assistance. Sans consentement, les données de surveillance ne peuvent pas être collectées légalement.
+        </p>
       </div>
     </div>
   )

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +27,8 @@ async def register_route(payload: UserCreate, db: AsyncSession = Depends(get_db)
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         role=payload.role,
+        consent_given=payload.consent_given,
+        consent_date=datetime.now(timezone.utc) if payload.consent_given else None,
         preferences=payload.preferences,
     )
     db.add(user)

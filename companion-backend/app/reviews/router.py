@@ -70,8 +70,8 @@ def _build_response(review: Review, messages: list[ReviewMessageResponse]) -> Re
 
 @router.post('', response_model=ReviewResponse)
 async def create_review(payload: ReviewCreate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role not in {UserRole.caregiver, UserRole.admin}:
-        raise HTTPException(status_code=403, detail='Only caregivers and admins can create reviews')
+    if current.role not in {UserRole.caregiver, UserRole.admin, UserRole.elderly}:
+        raise HTTPException(status_code=403, detail='Forbidden')
 
     review = Review(
         created_by_user_id=current.id,
@@ -134,7 +134,7 @@ async def reply_review(
 @router.get('', response_model=list[ReviewResponse])
 async def list_reviews(current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     query = select(Review)
-    if current.role == UserRole.caregiver:
+    if current.role in {UserRole.caregiver, UserRole.elderly}:
         query = query.where(Review.created_by_user_id == current.id)
     elif current.role != UserRole.admin:
         raise HTTPException(status_code=403, detail='Forbidden')

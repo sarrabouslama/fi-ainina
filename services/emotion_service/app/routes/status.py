@@ -24,6 +24,7 @@ class StatusResponse(BaseModel):
 
 
 @router.get("/status", response_model=StatusResponse)
+@router.get("/status/emotion", response_model=StatusResponse)
 def get_status() -> StatusResponse:
     """Return the latest in-memory emotion state."""
     snapshot = get_state_store().snapshot()

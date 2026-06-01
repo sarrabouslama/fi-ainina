@@ -1,6 +1,8 @@
+import { useState } from 'react'
+import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Mic, MessageSquare, Star, LogOut, Bell, Phone, Heart } from 'lucide-react'
+import { Mic, MessageSquare, Star, LogOut, Phone, Heart, Activity, CheckCircle, Loader2 } from 'lucide-react'
 
 export default function ElderlyHome() {
   const { user, logout } = useAuth()
@@ -10,13 +12,29 @@ export default function ElderlyHome() {
   const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir'
   const firstName = user?.full_name?.split(' ')[0] || ''
 
+  const [emergencyState, setEmergencyState] = useState('idle') // idle | sending | sent
   const handleLogout = async () => { await logout(); navigate('/login') }
+
+  const handleEmergency = async () => {
+    if (emergencyState !== 'idle') return
+    setEmergencyState('sending')
+    try {
+      // Goes through companion backend (port 8000) — CORS-safe, authenticated,
+      // writes to DB and broadcasts to all admin/caregiver WebSocket connections immediately
+      await axios.post('http://127.0.0.1:8000/alerts/emergency', {}, { timeout: 5000 })
+      setEmergencyState('sent')
+      setTimeout(() => setEmergencyState('idle'), 8000)
+    } catch (e) {
+      console.error('Emergency alert failed:', e)
+      setEmergencyState('idle')
+    }
+  }
 
   const actions = [
     { label: 'Parler à Léa', desc: 'Votre assistante vocale', path: '/voice', Icon: Mic, color: 'var(--green)', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
     { label: 'Mes conversations', desc: 'Historique avec Léa', path: '/conversations', Icon: MessageSquare, color: 'var(--teal)', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.15)' },
-    { label: 'Mes alertes', desc: 'Notifications reçues', path: '/alerts', Icon: Bell, color: 'var(--warn)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' },
-    { label: 'Laisser un avis', desc: 'Feedback et questions', path: '/reviews', Icon: Star, color: 'var(--gold)', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' },
+    { label: 'Ma surveillance', desc: 'Chute et émotion', path: '/monitoring', Icon: Activity, color: 'var(--teal)', bg: 'rgba(13,125,107,0.08)', border: 'rgba(13,125,107,0.15)' },
+    { label: 'Laisser un avis', desc: 'Feedback et questions', path: '/reviews', Icon: Star, color: 'var(--gold)', bg: 'rgba(160,106,16,0.08)', border: 'rgba(160,106,16,0.15)' },
   ]
 
   return (
@@ -71,15 +89,19 @@ export default function ElderlyHome() {
         </div>
 
         {/* Emergency */}
-        <button onClick={() => navigate('/voice')}
+        <button onClick={handleEmergency}
+          disabled={emergencyState !== 'idle'}
           className="w-full py-4 rounded-2xl text-base font-bold mb-6 transition-all flex items-center justify-center gap-3"
           style={{
-            background: 'rgba(239,68,68,0.1)',
-            border: '1px solid rgba(239,68,68,0.3)',
-            color: '#f87171',
+            background: emergencyState === 'sent' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${emergencyState === 'sent' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.3)'}`,
+            color: emergencyState === 'sent' ? 'var(--ok)' : '#f87171',
+            cursor: emergencyState !== 'idle' ? 'default' : 'pointer',
           }}>
-          <Phone size={18} />
-          Urgence — Appeler à l'aide
+          {emergencyState === 'sending' && <Loader2 size={18} className="animate-spin" />}
+          {emergencyState === 'sent' && <CheckCircle size={18} />}
+          {emergencyState === 'idle' && <Phone size={18} />}
+          {emergencyState === 'sent' ? 'Alerte envoyée — aide en route' : emergencyState === 'sending' ? 'Envoi en cours...' : 'Urgence — Appeler à l\'aide'}
         </button>
 
         <button onClick={handleLogout}

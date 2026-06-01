@@ -2,17 +2,33 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LayoutDashboard, Mic, Bell, Activity, Users, MessageSquare, Star, LogOut } from 'lucide-react'
 
-const NAV = [
-  { path: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
-  { path: '/voice',         icon: Mic,             label: 'Léa' },
-  { path: '/alerts',        icon: Bell,            label: 'Alertes' },
-  { path: '/monitoring',    icon: Activity,        label: 'Surveillance' },
-  { path: '/conversations', icon: MessageSquare,   label: 'Conversations' },
-  { path: '/reviews',       icon: Star,            label: 'Revues' },
-  { path: '/users',         icon: Users,           label: 'Utilisateurs', adminOnly: true },
-]
+// Nav items per role — each role sees only what's relevant to them
+const NAV_BY_ROLE = {
+  elderly: [
+    { path: '/voice',         icon: Mic,           label: 'Léa' },
+    { path: '/monitoring',    icon: Activity,      label: 'Ma surveillance' },
+    { path: '/conversations', icon: MessageSquare, label: 'Conversations' },
+    { path: '/reviews',       icon: Star,          label: 'Revues' },
+  ],
+  caregiver: [
+    { path: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
+    { path: '/alerts',        icon: Bell,            label: 'Alertes' },
+    { path: '/monitoring',    icon: Activity,        label: 'Surveillance' },
+    { path: '/conversations', icon: MessageSquare,   label: 'Conversations' },
+    { path: '/reviews',       icon: Star,            label: 'Revues' },
+  ],
+  admin: [
+    { path: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
+    { path: '/alerts',        icon: Bell,            label: 'Alertes' },
+    { path: '/users',         icon: Users,           label: 'Utilisateurs' },
+    { path: '/monitoring',    icon: Activity,        label: 'Surveillance' },
+    { path: '/conversations', icon: MessageSquare,   label: 'Conversations' },
+    { path: '/reviews',       icon: Star,            label: 'Revues' },
+  ],
+}
 
 const ROLE_COLORS = { admin: '#f59e0b', caregiver: '#06b6d4', elderly: '#10b981' }
+const ROLE_LABELS = { admin: 'Administrateur', caregiver: 'Soignant', elderly: 'Résident' }
 
 export default function TopNav({ wsConnected }) {
   const { pathname } = useLocation()
@@ -20,22 +36,21 @@ export default function TopNav({ wsConnected }) {
   const navigate = useNavigate()
 
   const handleLogout = async () => { await logout(); navigate('/login') }
-  const visibleNav = NAV.filter(n => !n.adminOnly || user?.role === 'admin')
+
+  const visibleNav = NAV_BY_ROLE[user?.role] || []
   const roleColor = ROLE_COLORS[user?.role] || 'var(--muted)'
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 glass-dark flex items-center px-5 gap-5"
+    <header className="fixed top-0 left-0 right-0 z-50 glass-dark flex items-center px-5 gap-5"
       style={{ height: 72, borderBottom: '1px solid rgba(45,120,45,0.12)' }}>
 
-      {/* Logo */}
       <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-        <img src="/logo.png" alt="logo" style={{ width: 160, height: 160, objectFit: 'contain' }} />
-        <span className="font-arabic font-bold text-xl text-gradient hidden sm:block">في عينينا</span>
+        <img src="/logo.png" alt="logo" style={{ width: 150, height: 150, objectFit: 'contain', flexShrink: 0 }} />
+        <span className="font-arabic font-bold text-xl text-gradient hidden sm:block" style={{ lineHeight: 1.6, paddingBottom: '2px', display: 'inline-block' }}>في عينينا</span>
       </Link>
 
       <div className="w-px h-10 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
-      {/* Nav links */}
       <nav className="flex items-center gap-2 flex-1 overflow-x-auto">
         {visibleNav.map(({ path, icon: Icon, label }) => {
           const active = pathname === path
@@ -54,9 +69,7 @@ export default function TopNav({ wsConnected }) {
         })}
       </nav>
 
-      {/* Right side */}
       <div className="flex items-center gap-4 flex-shrink-0">
-        {/* WS indicator */}
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full"
             style={{ background: wsConnected ? 'var(--ok)' : 'var(--muted)' }} />
@@ -67,7 +80,6 @@ export default function TopNav({ wsConnected }) {
 
         <div className="w-px h-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
-        {/* User */}
         {user && (
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
@@ -75,8 +87,8 @@ export default function TopNav({ wsConnected }) {
               {user.full_name?.[0] || '?'}
             </div>
             <div className="hidden md:block">
-              <p className="text-sm font-semibold text-white leading-none">{user.full_name}</p>
-              <p className="text-xs mt-0.5" style={{ color: roleColor }}>{user.role}</p>
+              <p className="text-sm font-semibold leading-none" style={{ color: 'var(--text)' }}>{user.full_name}</p>
+              <p className="text-xs mt-0.5" style={{ color: roleColor }}>{ROLE_LABELS[user.role] || user.role}</p>
             </div>
           </div>
         )}

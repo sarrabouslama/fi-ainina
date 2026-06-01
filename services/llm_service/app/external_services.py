@@ -8,87 +8,71 @@ from app.database import get_pool
 logger = logging.getLogger(__name__)
 
 async def get_long_term_facts(user_id: str) -> str:
-    """
-    Read durable user context from the shared PostgreSQL schema.
-
-    The current shared schema does not define a separate facts table, so the LLM
-    uses the user's profile fields and preferences as long-term context.
-    """
+    """Read durable user context from PostgreSQL, including assigned caregiver."""
     try:
         pool = await get_pool()
         row = await pool.fetchrow(
+            "SELECT full_name, role::text AS role, preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        # Find caregiver via person_watchers
+        caregiver_row = await pool.fetchrow(
             """
-            SELECT full_name, role::text AS role, consent_given, preferences
-            FROM users
-            WHERE id = $1
+            SELECT u.full_name, u.phone
+            FROM person_watchers pw
+            JOIN users u ON u.id = pw.user_id
+            WHERE pw.person_id = $1
+            LIMIT 1
             """,
             user_id,
         )
     except Exception as exc:
         logger.warning("Could not load user context for %s: %s", user_id, exc)
-        return "No long-term user context available."
+        return "Aucun contexte utilisateur disponible."
 
     if not row:
-        return "No long-term user context available."
+        return "Aucun contexte utilisateur disponible."
 
-    context = [
-        f"Name: {row['full_name']}",
-        f"Role: {row['role']}",
-        f"Consent given: {row['consent_given']}",
-    ]
+    context = [f"Prénom du résident : {row['full_name']}"]
+
+    if caregiver_row:
+        caregiver_name = caregiver_row['full_name']
+        caregiver_phone = caregiver_row['phone'] or 'non renseigné'
+        context.append(f"Soignant assigné : {caregiver_name}")
+        context.append(f"Téléphone du soignant : {caregiver_phone}")
+        context.append(
+            f"INSTRUCTION ABSOLUE EN CAS D'URGENCE : dire exactement "
+            f"\"Je contacte votre soignant {caregiver_name}"
+            + (f" au {caregiver_phone}" if caregiver_row['phone'] else "")
+            + " immédiatement.\""
+        )
+    else:
+        context.append(
+            "Aucun soignant assigné. En cas d'urgence, dire exactement : "
+            "\"Je déclenche une alerte d'urgence pour vous.\""
+        )
 
     preferences = row["preferences"]
     if isinstance(preferences, dict) and preferences:
-        preference_text = ", ".join(f"{key}: {value}" for key, value in preferences.items())
-        context.append(f"Preferences: {preference_text}")
+        for key, value in preferences.items():
+            if key != "assigned_user_ids":
+                context.append(f"{key}: {value}")
 
     return "\n".join(context)
 
 
 async def save_conversation_turn(user_id: str, user_message: str, assistant_reply: str) -> None:
-    """Persist the chat turn in the shared conversation tables."""
+    """Persist the chat turn via the companion backend API."""
     try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                session_id = await conn.fetchval(
-                    """
-                    SELECT id
-                    FROM conversation_sessions
-                    WHERE user_id = $1 AND ended_at IS NULL
-                    ORDER BY started_at DESC
-                    LIMIT 1
-                    """,
-                    user_id,
-                )
-
-                if session_id is None:
-                    session_id = await conn.fetchval(
-                        """
-                        INSERT INTO conversation_sessions (user_id, started_at, message_count)
-                        VALUES ($1, NOW(), 0)
-                        RETURNING id
-                        """,
-                        user_id,
-                    )
-
-                await conn.execute(
-                    """
-                    INSERT INTO conversation_messages (session_id, role, content, timestamp)
-                    VALUES ($1, 'user', $2, NOW()), ($1, 'assistant', $3, NOW())
-                    """,
-                    session_id,
-                    user_message,
-                    assistant_reply,
-                )
-                await conn.execute(
-                    """
-                    UPDATE conversation_sessions
-                    SET message_count = message_count + 2
-                    WHERE id = $1
-                    """,
-                    session_id,
-                )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{settings.companion_backend_url}/conversations/save",
+                json={
+                    "user_id": user_id,
+                    "user_message": user_message,
+                    "assistant_reply": assistant_reply,
+                },
+            )
     except Exception as exc:
         logger.warning("Could not persist conversation for %s: %s", user_id, exc)
 

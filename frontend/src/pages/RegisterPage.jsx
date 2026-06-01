@@ -13,7 +13,9 @@ const ROLES = [
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '', role: 'elderly' })
+  const [form, setForm] = useState({
+    full_name: '', email: '', password: '', phone: '', role: 'elderly', consent_given: false,
+  })
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -28,10 +30,9 @@ export default function RegisterPage() {
       await axios.post(`${API}/auth/register`, form)
       navigate('/login', { state: { registered: true } })
     } catch (err) {
-      const detail = err.response?.data?.detail
       if (err.response?.status === 409) setError('Un compte avec cet email existe déjà.')
       else if (!err.response) setError('Impossible de joindre le serveur.')
-      else setError(detail || 'Erreur lors de l\'inscription.')
+      else setError(err.response?.data?.detail || "Erreur lors de l'inscription.")
     } finally {
       setLoading(false)
     }
@@ -53,7 +54,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="glass rounded-2xl p-8">
-          <h2 className="font-display text-xl font-bold text-white mb-1">Créer un compte</h2>
+          <h2 className="font-display text-xl font-bold mb-1" style={{ color: 'var(--text)' }}>Créer un compte</h2>
           <p className="text-sm mb-6" style={{ color: 'var(--muted)' }}>
             Rejoignez le réseau de surveillance bienveillante
           </p>
@@ -100,14 +101,14 @@ export default function RegisterPage() {
                   return (
                     <label key={value} className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
                       style={{
-                        background: active ? 'rgba(16,185,129,0.1)' : 'rgba(22,30,46,0.6)',
-                        border: `1px solid ${active ? 'rgba(16,185,129,0.3)' : 'rgba(99,179,237,0.1)'}`,
+                        background: active ? 'rgba(30,107,46,0.1)' : 'rgba(255,255,255,0.5)',
+                        border: `1px solid ${active ? 'rgba(30,107,46,0.3)' : 'rgba(45,120,45,0.12)'}`,
                       }}>
                       <input type="radio" name="role" value={value} checked={active}
                         onChange={() => handleChange('role', value)} className="hidden" />
                       <Icon size={14} style={{ color: active ? 'var(--green)' : 'var(--muted)', flexShrink: 0 }} />
                       <div>
-                        <p className="text-sm font-medium" style={{ color: active ? 'var(--text)' : 'var(--text2)' }}>{label}</p>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</p>
                         <p className="text-xs" style={{ color: 'var(--muted)' }}>{desc}</p>
                       </div>
                     </label>
@@ -115,6 +116,29 @@ export default function RegisterPage() {
                 })}
               </div>
             </div>
+
+            {/* RGPD Consent */}
+            <label className="flex items-start gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
+              style={{
+                background: form.consent_given ? 'rgba(30,107,46,0.08)' : 'rgba(255,255,255,0.5)',
+                border: `1px solid ${form.consent_given ? 'rgba(30,107,46,0.25)' : 'rgba(45,120,45,0.12)'}`,
+              }}>
+              <input
+                type="checkbox"
+                checked={form.consent_given}
+                onChange={e => handleChange('consent_given', e.target.checked)}
+                className="mt-0.5 flex-shrink-0"
+                style={{ accentColor: 'var(--green)', width: 15, height: 15 }}
+              />
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                  Consentement RGPD
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                  J'accepte que mes données (conversations, alertes, surveillance) soient collectées et traitées à des fins d'assistance et de sécurité, conformément au RGPD.
+                </p>
+              </div>
+            </label>
 
             {error && (
               <div className="px-4 py-3 rounded-xl text-sm"
@@ -128,7 +152,7 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <div style={{ height: 1, background: 'rgba(99,179,237,0.1)', margin: '24px 0' }} />
+          <div style={{ height: 1, background: 'rgba(45,120,45,0.1)', margin: '24px 0' }} />
           <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>
             Déjà inscrit ?{' '}
             <Link to="/login" className="font-semibold" style={{ color: 'var(--green-light)' }}>Se connecter</Link>

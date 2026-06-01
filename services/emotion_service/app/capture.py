@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 _capture_thread: Optional[threading.Thread] = None
 _capture_lock = threading.Lock()
+_stop_event = threading.Event()
+_current_frame = None
+_frame_lock = threading.Lock()
 
 
 def _largest_face_bbox(frame) -> Optional[Tuple[int, int, int, int]]:
@@ -50,8 +53,8 @@ def _capture_loop() -> None:
     last_distress_active = False
     last_redness_active = False
 
-    while True:
-        capture = cv2.VideoCapture(0)
+    while not _stop_event.is_set():
+        capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not capture.isOpened():
             logger.error("Unable to open webcam device 0; retrying")
             capture.release()
@@ -66,6 +69,10 @@ def _capture_loop() -> None:
                     break
 
                 frame_index += 1
+                # Always store current frame for live preview
+                with _frame_lock:
+                    global _current_frame
+                    _current_frame = frame.copy()
                 if frame_index % FRAME_SAMPLE_RATE != 0:
                     continue
 
@@ -128,7 +135,23 @@ def start_capture_thread() -> None:
     with _capture_lock:
         if _capture_thread is not None and _capture_thread.is_alive():
             return
-
+        _stop_event.clear()
         _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="emotion-capture")
         _capture_thread.start()
         logger.info("Emotion capture worker thread started")
+
+
+def get_current_frame():
+    """Return a copy of the most recent camera frame, or None."""
+    with _frame_lock:
+        return _current_frame.copy() if _current_frame is not None else None
+
+
+def stop_capture_thread() -> None:
+    """Signal the webcam capture worker to stop."""
+    global _capture_thread
+    _stop_event.set()
+    if _capture_thread is not None:
+        _capture_thread.join(timeout=3.0)
+        _capture_thread = None
+    logger.info("Emotion capture worker thread stopped")
