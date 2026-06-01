@@ -6,6 +6,9 @@ import torch
 import httpx
 import os
 import time
+from app.ffmpeg_path import ensure_ffmpeg_on_path
+
+ensure_ffmpeg_on_path()
 
 # ── Settings ──────────────────────────────────────────────
 SAMPLE_RATE = 16000

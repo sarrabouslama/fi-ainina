@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+python-multipart
 openai-whisper
 TTS                    # Coqui TTS
 sounddevice            # capture micro
