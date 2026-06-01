@@ -14,6 +14,14 @@ class UserCreate(BaseModel):
     preferences: dict | None = None
 
 
+class CaregiverCreate(BaseModel):
+    email: EmailStr
+    phone: str | None = None
+    password: str
+    full_name: str
+    preferences: dict | None = None
+
+
 class UserUpdate(BaseModel):
     full_name: str | None = None
     phone: str | None = None
