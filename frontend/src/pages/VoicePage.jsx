@@ -39,6 +39,7 @@ export default function VoicePage() {
   const [history, setHistory] = useState([])
   const [continuousVoice, setContinuousVoice] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
+  const [sending, setSending] = useState(false)
 
   // Microphone state
   const [micListening, setMicListening] = useState(false)
@@ -95,10 +96,21 @@ export default function VoicePage() {
     setContinuousVoice(false)
     recognitionRef.current?.stop()
     setMicListening(false)
+    // Restart wake-word listening if mains-libres was active
+    if (wakeIntendedRef.current === false && wakeRecognitionRef.current === null) {
+      // wake was stopped for command mode — re-arm it
+      setTimeout(() => {
+        if (!continuousVoiceRef.current) {
+          wakeIntendedRef.current = true
+        }
+      }, 400)
+    }
   }, [])
 
   // ── Core LLM + TTS logic (called by handleSubmit and auto-submit) ─────────
   const processMessage = useCallback(async (userMsg) => {
+    setSending(true)
+    setTimeout(() => setSending(false), 800) // flash "Envoi..." then LLM takes over
     setLoading(true)
     setHistory(h => [...h, { role: 'user', text: userMsg }])
     try {
@@ -119,6 +131,7 @@ export default function VoicePage() {
       let detectedEmotion = 'neutral'
       let firstToken = true
 
+      let llmError = null
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -127,7 +140,7 @@ export default function VoicePage() {
           if (!line.startsWith('data: ')) continue
           try {
             const data = JSON.parse(line.slice(6))
-            if (data.error) throw new Error(data.error)
+            if (data.error) { llmError = data.error; continue } // capture, don't throw
             if (data.token) {
               if (firstToken) { setLoading(false); firstToken = false }
               reply += data.token
@@ -138,8 +151,19 @@ export default function VoicePage() {
         }
       }
 
-      setHistory(h => [...h, { role: 'lea', text: reply, emotion: detectedEmotion }])
       setStreamingReply('')
+
+      if (!reply) {
+        // LLM returned no text — show the actual error if we have one
+        const errMsg = llmError
+          ? `Léa n'a pas pu répondre : ${llmError}`
+          : 'Léa n\'a pas répondu (vérifiez que Ollama est démarré : ollama serve)'
+        setHistory(h => [...h, { role: 'error', text: errMsg }])
+        if (continuousVoiceRef.current) setTimeout(() => startMicAutoSubmitRef.current?.(), 1500)
+        return
+      }
+
+      setHistory(h => [...h, { role: 'lea', text: reply, emotion: detectedEmotion }])
 
       // Save conversation directly from frontend
       if (reply && user?.id) {
@@ -171,39 +195,71 @@ export default function VoicePage() {
     } catch (e) {
       const msg = e.message || ''
       setHistory(h => [...h, { role: 'error', text: `Erreur : ${msg || 'Service LLM non disponible'}` }])
+      // Keep conversation alive even after an error
+      if (continuousVoiceRef.current) setTimeout(() => startMicAutoSubmitRef.current?.(), 1500)
     } finally {
       setLoading(false)
     }
   }, [speed, user])
 
   // ── Auto-submit mic: captures and immediately sends to LLM ───────────────
+  const STOP_WORDS = ['arrête', 'arrete', 'stop', 'au revoir', 'fin', 'bonne nuit']
+
   const startMicAutoSubmit = useCallback(() => {
     if (!hasSpeech) return
     const rec = new SpeechRecognition()
     rec.lang = 'fr-FR'
+    rec.continuous = true      // keep listening across pauses
     rec.interimResults = true
     rec.maxAlternatives = 1
     recognitionRef.current = rec
+
+    let accumulatedFinal = ''  // full text built from all final results
+    let sendTimer = null       // debounce: send 1.8s after last word
+
     rec.onstart = () => setMicListening(true)
-    rec.onend = () => { setMicListening(false); setInterimTranscript('') }
+    rec.onend = () => {
+      setMicListening(false)
+      setInterimTranscript('')
+      clearTimeout(sendTimer)
+    }
     rec.onerror = () => {
       setMicListening(false)
       setInterimTranscript('')
+      clearTimeout(sendTimer)
       if (continuousVoiceRef.current) setTimeout(() => startMicAutoSubmitRef.current?.(), 1000)
     }
     rec.onresult = (e) => {
-      const results = Array.from(e.results)
-      const interim = results.map(r => r[0].transcript).join('')
-      setInterimTranscript(interim)
-      const last = results[results.length - 1]
-      if (last.isFinal) {
-        const transcript = last[0].transcript.trim()
-        setInterimTranscript('')
-        if (transcript) processMessage(transcript)
+      // Separate interim (in-progress) from final (committed) results
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          accumulatedFinal += e.results[i][0].transcript + ' '
+        } else {
+          interim += e.results[i][0].transcript
+        }
+      }
+      setInterimTranscript((accumulatedFinal + interim).trim())
+
+      if (accumulatedFinal.trim()) {
+        // Reset 1.8s silence timer on every new word
+        clearTimeout(sendTimer)
+        sendTimer = setTimeout(() => {
+          const transcript = accumulatedFinal.trim()
+          if (!transcript) return
+          rec.stop()
+          setInterimTranscript('')
+          // Stop-word check — end conversation by voice
+          if (STOP_WORDS.some(w => transcript.toLowerCase().includes(w))) {
+            stopConversation()
+            return
+          }
+          processMessage(transcript)
+        }, 1800)
       }
     }
     try { rec.start() } catch {}
-  }, [hasSpeech, SpeechRecognition, processMessage])
+  }, [hasSpeech, SpeechRecognition, processMessage, stopConversation])
 
   // Keep ref in sync so processMessage's onended closure always has the latest
   useEffect(() => { startMicAutoSubmitRef.current = startMicAutoSubmit }, [startMicAutoSubmit])
@@ -231,6 +287,12 @@ export default function VoicePage() {
         const ack = 'Oui, je vous écoute. Que souhaitez-vous ?'
         setHistory(h => [...h, { role: 'lea', text: ack }])
 
+        // MUST stop wake recognition before starting command mic —
+        // Chrome only allows one SpeechRecognition instance at a time.
+        wakeIntendedRef.current = false
+        clearTimeout(wakeRestartTimer.current)
+        rec.stop()
+
         const startListeningAfterAck = () => setTimeout(() => startMicAutoSubmitRef.current?.(), 300)
 
         axios.post('http://127.0.0.1:8002/speak', { text: ack, speed: 1.0 }, { responseType: 'blob', timeout: 10000 })
@@ -238,7 +300,6 @@ export default function VoicePage() {
             const audio = new Audio(URL.createObjectURL(r.data))
             audio.onended = startListeningAfterAck
             audio.play().catch(() => {
-              // Autoplay blocked — fallback to browser TTS
               const utt = new SpeechSynthesisUtterance(ack)
               utt.lang = 'fr-FR'
               utt.onend = startListeningAfterAck
@@ -246,7 +307,6 @@ export default function VoicePage() {
             })
           })
           .catch(() => {
-            // Voice service unavailable — use browser TTS
             const utt = new SpeechSynthesisUtterance(ack)
             utt.lang = 'fr-FR'
             utt.onend = startListeningAfterAck
@@ -483,6 +543,15 @@ export default function VoicePage() {
                   </div>
                 </div>
               ))
+            )}
+            {sending && (
+              <div className="flex justify-end animate-fade-up">
+                <div className="px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-semibold"
+                  style={{ background: 'rgba(30,107,46,0.12)', border: '1px solid rgba(30,107,46,0.25)', borderRadius: '18px 18px 4px 18px', color: 'var(--green)' }}>
+                  <Loader2 size={12} className="animate-spin" />
+                  Envoi à Léa...
+                </div>
+              </div>
             )}
             {loading && (
               <div className="flex justify-start animate-fade-up">

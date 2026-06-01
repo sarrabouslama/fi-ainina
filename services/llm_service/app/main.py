@@ -53,6 +53,15 @@ def health():
     return {"service": "llm_service", "status": "ok"}
 
 
+@app.delete("/memory/{user_id}")
+async def clear_memory(user_id: str):
+    """Flush the short-term conversation history for a user (e.g. when switching accounts)."""
+    from app.memory import redis_client
+    key = f"memory:short_term:{user_id}"
+    await redis_client.delete(key)
+    return {"ok": True, "cleared": user_id}
+
+
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """SSE endpoint — yields tokens as Ollama generates them."""

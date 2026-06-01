@@ -3,7 +3,6 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import scipy.io.wavfile as wav
-import whisper
 import httpx
 import time
 
@@ -13,10 +12,6 @@ WAKE_WORDS = [
     "bonjour léa", "bonjour lea", "bonjour la",
     "bonjour", "bonne journée", "bon jour"
 ]
-
-print(" Loading Whisper for command processing...")
-model = whisper.load_model("medium")
-print(" Ready!")
 
 recognizer = sr.Recognizer()
 recognizer.energy_threshold = 300
