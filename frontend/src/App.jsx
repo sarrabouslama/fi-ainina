@@ -34,7 +34,7 @@ function AppLayout({ children, wsConnected }) {
   return (
     <div className="min-h-screen">
       <TopNav wsConnected={wsConnected} />
-      <main className="pt-14 min-h-screen overflow-y-auto">
+      <main className="min-h-screen overflow-y-auto" style={{ paddingTop: '72px' }}>
         {children}
       </main>
     </div>

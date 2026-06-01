@@ -26,8 +26,8 @@ export default function ElderlyHome() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="logo" className="w-100 h-100 object-contain mx-auto mb-4" />
-          <h1 className="font-display text-4xl font-bold" style={{ color: 'var(--text)' }}>
+          <img src="/logo.png" alt="logo" style={{ width: 400, height: 400 }} className="object-contain mx-auto mb-4" />
+          <h1 className="text-3xl font-bold" style={{ color: 'var(--text)' }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
           <p className="text-base mt-2" style={{ color: 'var(--text2)' }}>

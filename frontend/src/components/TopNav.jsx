@@ -24,30 +24,30 @@ export default function TopNav({ wsConnected }) {
   const roleColor = ROLE_COLORS[user?.role] || 'var(--muted)'
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-14 glass-dark flex items-center px-6 gap-6"
-      style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+    <header className="fixed top-0 left-0 right-0 z-40 glass-dark flex items-center px-5 gap-5"
+      style={{ height: 72, borderBottom: '1px solid rgba(45,120,45,0.12)' }}>
 
       {/* Logo */}
-      <Link to="/" className="flex items-center gap-2 flex-shrink-0">
-        <img src="/logo.png" alt="logo" style={{ width: 48, height: 48, objectFit: 'contain' }} />
+      <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
+        <img src="/logo.png" alt="logo" style={{ width: 160, height: 160, objectFit: 'contain' }} />
         <span className="font-arabic font-bold text-xl text-gradient hidden sm:block">في عينينا</span>
       </Link>
 
-      <div className="w-px h-6 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
+      <div className="w-px h-10 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
       {/* Nav links */}
-      <nav className="flex items-center gap-1 flex-1 overflow-x-auto">
+      <nav className="flex items-center gap-2 flex-1 overflow-x-auto">
         {visibleNav.map(({ path, icon: Icon, label }) => {
           const active = pathname === path
           return (
             <Link key={path} to={path}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex-shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-base font-medium transition-all whitespace-nowrap flex-shrink-0"
               style={{
                 background: active ? 'rgba(16,185,129,0.15)' : 'transparent',
                 color: active ? 'var(--green-light)' : 'var(--text2)',
                 borderBottom: active ? '2px solid var(--green)' : '2px solid transparent',
               }}>
-              <Icon size={13} />
+              <Icon size={18} />
               {label}
             </Link>
           )
@@ -55,38 +55,38 @@ export default function TopNav({ wsConnected }) {
       </nav>
 
       {/* Right side */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-4 flex-shrink-0">
         {/* WS indicator */}
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full"
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full"
             style={{ background: wsConnected ? 'var(--ok)' : 'var(--muted)' }} />
-          <span className="text-xs hidden md:block" style={{ color: wsConnected ? 'var(--ok)' : 'var(--muted)' }}>
+          <span className="text-sm hidden md:block" style={{ color: wsConnected ? 'var(--ok)' : 'var(--muted)' }}>
             {wsConnected ? 'En direct' : 'Hors ligne'}
           </span>
         </div>
 
-        <div className="w-px h-5" style={{ background: 'rgba(0,0,0,0.08)' }} />
+        <div className="w-px h-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
         {/* User */}
         {user && (
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
               style={{ background: `${roleColor}20`, color: roleColor, border: `1px solid ${roleColor}30` }}>
               {user.full_name?.[0] || '?'}
             </div>
             <div className="hidden md:block">
-              <p className="text-xs font-semibold text-white leading-none">{user.full_name}</p>
+              <p className="text-sm font-semibold text-white leading-none">{user.full_name}</p>
               <p className="text-xs mt-0.5" style={{ color: roleColor }}>{user.role}</p>
             </div>
           </div>
         )}
 
         <button onClick={handleLogout}
-          className="p-1.5 rounded-lg transition-all flex-shrink-0"
+          className="p-2 rounded-lg transition-all flex-shrink-0"
           style={{ color: 'var(--muted)' }}
           onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
           onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
-          <LogOut size={14} />
+          <LogOut size={18} />
         </button>
       </div>
     </header>
