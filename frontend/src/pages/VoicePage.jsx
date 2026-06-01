@@ -38,6 +38,7 @@ export default function VoicePage() {
   const [mode, setMode] = useState('chat')
   const [history, setHistory] = useState([])
   const [continuousVoice, setContinuousVoice] = useState(false)
+  const [interimTranscript, setInterimTranscript] = useState('')
 
   // Microphone state
   const [micListening, setMicListening] = useState(false)
@@ -174,18 +175,26 @@ export default function VoicePage() {
     if (!hasSpeech) return
     const rec = new SpeechRecognition()
     rec.lang = 'fr-FR'
-    rec.interimResults = false
+    rec.interimResults = true
     rec.maxAlternatives = 1
     recognitionRef.current = rec
     rec.onstart = () => setMicListening(true)
-    rec.onend = () => setMicListening(false)
+    rec.onend = () => { setMicListening(false); setInterimTranscript('') }
     rec.onerror = () => {
       setMicListening(false)
+      setInterimTranscript('')
       if (continuousVoiceRef.current) setTimeout(() => startMicAutoSubmitRef.current?.(), 1000)
     }
     rec.onresult = (e) => {
-      const transcript = e.results[0][0].transcript.trim()
-      if (transcript) processMessage(transcript)
+      const results = Array.from(e.results)
+      const interim = results.map(r => r[0].transcript).join('')
+      setInterimTranscript(interim)
+      const last = results[results.length - 1]
+      if (last.isFinal) {
+        const transcript = last[0].transcript.trim()
+        setInterimTranscript('')
+        if (transcript) processMessage(transcript)
+      }
     }
     try { rec.start() } catch {}
   }, [hasSpeech, SpeechRecognition, processMessage])
@@ -211,10 +220,32 @@ export default function VoicePage() {
       if (WAKE_WORDS.some(w => said.includes(w))) {
         setWakeDetected(true)
         setTimeout(() => setWakeDetected(false), 2000)
-        axios.post('http://127.0.0.1:8002/speak', { text: 'Oui, je vous écoute.', speed: 1.0 }, { responseType: 'blob', timeout: 10000 })
-          .then(r => new Audio(URL.createObjectURL(r.data)).play())
-          .catch(() => {})
-        setTimeout(() => startMic(), 1200)
+        continuousVoiceRef.current = true
+        setContinuousVoice(true)
+        const ack = 'Oui, je vous écoute. Que souhaitez-vous ?'
+        setHistory(h => [...h, { role: 'lea', text: ack }])
+
+        const startListeningAfterAck = () => setTimeout(() => startMicAutoSubmitRef.current?.(), 300)
+
+        axios.post('http://127.0.0.1:8002/speak', { text: ack, speed: 1.0 }, { responseType: 'blob', timeout: 10000 })
+          .then(r => {
+            const audio = new Audio(URL.createObjectURL(r.data))
+            audio.onended = startListeningAfterAck
+            audio.play().catch(() => {
+              // Autoplay blocked — fallback to browser TTS
+              const utt = new SpeechSynthesisUtterance(ack)
+              utt.lang = 'fr-FR'
+              utt.onend = startListeningAfterAck
+              window.speechSynthesis.speak(utt)
+            })
+          })
+          .catch(() => {
+            // Voice service unavailable — use browser TTS
+            const utt = new SpeechSynthesisUtterance(ack)
+            utt.lang = 'fr-FR'
+            utt.onend = startListeningAfterAck
+            window.speechSynthesis.speak(utt)
+          })
       }
     }
 
@@ -376,6 +407,36 @@ export default function VoicePage() {
             </div>
           )}
 
+          {/* Prominent listening indicator — shows during continuous voice when mic is active */}
+          {continuousVoice && micListening && (
+            <div className="flex items-center justify-center gap-3 py-3 mb-2 rounded-xl animate-fade-up"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+              <div className="flex gap-1 items-end">
+                {[1,2,3,4,3,2,1].map((h, i) => (
+                  <div key={i} className="rounded-full animate-pulse"
+                    style={{
+                      width: 4, height: h * 5,
+                      background: '#f87171',
+                      animationDelay: `${i * 0.1}s`,
+                    }} />
+                ))}
+              </div>
+              <span className="text-sm font-semibold" style={{ color: '#f87171' }}>
+                Je vous écoute...
+              </span>
+              <div className="flex gap-1 items-end">
+                {[1,2,3,4,3,2,1].reverse().map((h, i) => (
+                  <div key={i} className="rounded-full animate-pulse"
+                    style={{
+                      width: 4, height: h * 5,
+                      background: '#f87171',
+                      animationDelay: `${i * 0.1}s`,
+                    }} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Messages */}
           <div className="flex-1 overflow-y-auto flex flex-col gap-3 mb-4 pr-1">
             {history.length === 0 ? (
@@ -432,6 +493,22 @@ export default function VoicePage() {
                 </div>
               </div>
             )}
+            {/* Live transcript preview while mic is listening */}
+            {interimTranscript && (
+              <div className="flex justify-end animate-fade-up">
+                <div className="max-w-xs px-4 py-3 rounded-2xl text-sm italic"
+                  style={{
+                    background: 'rgba(30,107,46,0.06)',
+                    border: '1px dashed rgba(30,107,46,0.3)',
+                    color: 'var(--muted)',
+                    borderRadius: '18px 18px 4px 18px',
+                  }}>
+                  {interimTranscript}
+                  <span className="animate-pulse" style={{ color: 'var(--green)' }}>|</span>
+                </div>
+              </div>
+            )}
+
             {streamingReply && (
               <div className="flex justify-start animate-fade-up">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-0.5"

@@ -148,9 +148,28 @@ async def unassign_caregiver(caregiver_id: str, elderly_id: str, db: AsyncSessio
 
 @router.delete('/{user_id}', dependencies=[Depends(require_role(UserRole.admin))])
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import delete as sql_delete
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail='Not found')
+
+    # Delete conversation messages first (FK: messages → sessions → user)
+    sessions = (await db.execute(
+        select(ConversationSession).where(ConversationSession.user_id == user_id)
+    )).scalars().all()
+    for s in sessions:
+        await db.execute(sql_delete(ConversationMessage).where(ConversationMessage.session_id == s.id))
+    await db.execute(sql_delete(ConversationSession).where(ConversationSession.user_id == user_id))
+
+    # Delete alerts
+    from app.models import Alert
+    await db.execute(sql_delete(Alert).where(Alert.user_id == user_id))
+
+    # Remove caregiver assignments
+    await db.execute(sql_delete(PersonWatcher).where(
+        (PersonWatcher.user_id == user_id) | (PersonWatcher.person_id == user_id)
+    ))
+
     await db.delete(user)
     await db.commit()
     return {'ok': True}
