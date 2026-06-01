@@ -1,14 +1,14 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user, require_role
 from app.database import get_db
-from app.models import ConversationMessage, ConversationSession, PersonWatcher, User
+from app.models import ConversationMessage, ConversationSession, User
 from app.security import hash_password
-from app.users.schemas import CaregiverCreate, ConsentUpdate, UserCreate, UserResponse, UserUpdate
+from app.users.schemas import ConsentUpdate, UserCreate, UserResponse, UserUpdate
 from app.enums import UserRole
 
 
@@ -30,9 +30,7 @@ def to_response(user: User) -> UserResponse:
 
 
 @router.post('', response_model=UserResponse, dependencies=[Depends(require_role(UserRole.admin))])
-async def create_user(payload: UserCreate, response: Response, db: AsyncSession = Depends(get_db)):
-    if payload.role == UserRole.caregiver:
-        raise HTTPException(status_code=400, detail='Use /users/{elderly_id}/caregivers to create and link a caregiver')
+async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=409, detail='Email exists')
@@ -47,69 +45,8 @@ async def create_user(payload: UserCreate, response: Response, db: AsyncSession 
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    if user.role == UserRole.elderly:
-        response.headers['Location'] = f'/users/{user.id}'
     return to_response(user)
 
-
-@router.get('/{elderly_id}/caregivers', response_model=list[UserResponse], dependencies=[Depends(require_role(UserRole.admin))])
-async def list_caregivers_for_elderly(elderly_id: str, db: AsyncSession = Depends(get_db)):
-    caregivers = (
-        await db.execute(
-            select(User)
-            .join(PersonWatcher, PersonWatcher.user_id == User.id)
-            .where(PersonWatcher.person_id == elderly_id)
-        )
-    ).scalars().all()
-    return [to_response(user) for user in caregivers]
-
-
-async def _link_caregiver_to_elderly(db: AsyncSession, elderly_id: str, caregiver: User) -> User:
-    existing = (
-        await db.execute(
-            select(PersonWatcher).where(
-                PersonWatcher.person_id == elderly_id,
-                PersonWatcher.user_id == caregiver.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if not existing:
-        db.add(PersonWatcher(user_id=caregiver.id, person_id=elderly_id))
-
-    preferences = dict(caregiver.preferences or {})
-    assigned_ids = set(preferences.get('assigned_user_ids') or [])
-    assigned_ids.add(elderly_id)
-    preferences['assigned_user_ids'] = sorted(assigned_ids)
-    caregiver.preferences = preferences
-
-    await db.commit()
-    await db.refresh(caregiver)
-    return caregiver
-
-
-@router.post('/{elderly_id}/caregivers', response_model=UserResponse, dependencies=[Depends(require_role(UserRole.admin))])
-async def create_and_link_caregiver(elderly_id: str, payload: CaregiverCreate, response: Response, db: AsyncSession = Depends(get_db)):
-    elderly = (await db.execute(select(User).where(User.id == elderly_id, User.role == UserRole.elderly))).scalar_one_or_none()
-    if not elderly:
-        raise HTTPException(status_code=404, detail='Elderly not found')
-
-    exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
-    if exists:
-        raise HTTPException(status_code=409, detail='Email exists')
-
-    caregiver = User(
-        email=payload.email,
-        phone=payload.phone,
-        hashed_password=hash_password(payload.password),
-        full_name=payload.full_name,
-        role=UserRole.caregiver,
-        preferences=payload.preferences,
-    )
-    db.add(caregiver)
-    await db.flush()
-    caregiver = await _link_caregiver_to_elderly(db, elderly_id, caregiver)
-    response.headers['Location'] = f'/users/{elderly_id}'
-    return to_response(caregiver)
 
 @router.get('', response_model=list[UserResponse], dependencies=[Depends(require_role(UserRole.admin))])
 async def list_users(db: AsyncSession = Depends(get_db)):
