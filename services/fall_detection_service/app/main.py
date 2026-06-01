@@ -9,8 +9,10 @@ Exposes:
   WS   /stream                 - Real-time fall events (websocket)
 """
 
+import cv2
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from contextlib import asynccontextmanager
 import time
 import json
@@ -20,10 +22,10 @@ from typing import Optional, Dict, List
 from datetime import datetime
 
 from app.config import settings
-from services.fall_detection_service.app.core.analysis.fall_analysis_pipeline import fall_analyzer
-from services.fall_detection_service.app.core.vision.video_capture import video_capture
-from services.fall_detection_service.app.core.analysis.fall_detector import FallState, FallDetector
-from services.fall_detection_service.app.core.utils.debug_utils import debug_print
+from app.core.analysis.fall_analysis_pipeline import fall_analyzer
+from app.core.vision.video_capture import video_capture
+from app.core.analysis.fall_detector import FallState, FallDetector
+from app.core.utils.debug_utils import debug_print
 from app.core.redis_publisher import publish_fall_event, get_redis_client
 
 
@@ -238,6 +240,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000",
+                   "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ============================================================================
 # API ENDPOINTS
@@ -295,6 +306,51 @@ def get_events(limit: int = 50):
         "events": state_tracker.get_events(limit),
         "count": len(state_tracker.events),
     }
+
+
+@app.get("/video_feed")
+async def video_feed():
+    """MJPEG stream of the current camera frame."""
+    async def generate():
+        while True:
+            frame = video_capture.get_frame()
+            if frame is None:
+                await asyncio.sleep(0.05)
+                continue
+            ret, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            if not ret:
+                await asyncio.sleep(0.05)
+                continue
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            await asyncio.sleep(0.033)  # ~30 fps
+
+    return StreamingResponse(generate(), media_type='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.post("/camera/start")
+async def camera_start():
+    """Start (or restart) the fall detection camera."""
+    global processing_task
+    if not video_capture.is_running:
+        video_capture.start()
+    if processing_task is None or processing_task.done():
+        processing_task = asyncio.create_task(process_frames_background())
+    return {"status": "started", "service": "fall_detection"}
+
+
+@app.post("/camera/stop")
+async def camera_stop():
+    """Stop the fall detection camera."""
+    global processing_task
+    if processing_task and not processing_task.done():
+        processing_task.cancel()
+        try:
+            await processing_task
+        except asyncio.CancelledError:
+            pass
+        processing_task = None
+    video_capture.stop()
+    return {"status": "stopped", "service": "fall_detection"}
 
 
 @app.websocket("/stream")

@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -6,9 +9,33 @@ from app.auth.schemas import LoginRequest, MeResponse, TokenResponse
 from app.auth.service import blacklist_token, login, rotate_refresh_token
 from app.database import get_db
 from app.models import User
+from app.security import hash_password
+from app.users.schemas import UserCreate, UserResponse
 
 
 router = APIRouter(prefix='/auth', tags=['auth'])
+
+
+@router.post('/register', response_model=UserResponse, status_code=201)
+async def register_route(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+    if exists:
+        raise HTTPException(status_code=409, detail='Email déjà utilisé')
+    user = User(
+        email=payload.email,
+        phone=payload.phone,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
+        role=payload.role,
+        consent_given=payload.consent_given,
+        consent_date=datetime.now(timezone.utc) if payload.consent_given else None,
+        preferences=payload.preferences,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    from app.users.router import to_response
+    return to_response(user)
 
 
 @router.post('/login', response_model=TokenResponse)

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     password: str
     full_name: str
     role: UserRole
+    consent_given: bool = False
     preferences: dict | None = None
 
 

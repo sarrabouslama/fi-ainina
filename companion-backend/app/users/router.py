@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user, require_role
 from app.database import get_db
-from app.models import ConversationMessage, ConversationSession, User
+from app.models import ConversationMessage, ConversationSession, PersonWatcher, User
 from app.security import hash_password
 from app.users.schemas import ConsentUpdate, UserCreate, UserResponse, UserUpdate
 from app.enums import UserRole
@@ -78,6 +78,72 @@ async def patch_user(user_id: str, payload: UserUpdate, current: User = Depends(
     await db.commit()
     await db.refresh(user)
     return to_response(user)
+
+
+@router.get('/{user_id}/caregiver')
+async def get_caregiver_for_user(user_id: str, _: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Return the caregiver assigned to an elderly user (via person_watchers or preferences fallback)."""
+    # 1. Try person_watchers table first (canonical)
+    row = (await db.execute(
+        select(User).join(PersonWatcher, PersonWatcher.user_id == User.id)
+        .where(PersonWatcher.person_id == user_id)
+    )).scalar_one_or_none()
+    if row:
+        return {'id': row.id, 'full_name': row.full_name, 'phone': row.phone}
+
+    # 2. Fallback: scan caregiver preferences for assigned_user_ids
+    caregivers = (await db.execute(select(User).where(User.role == UserRole.caregiver))).scalars().all()
+    for c in caregivers:
+        if user_id in ((c.preferences or {}).get('assigned_user_ids') or []):
+            return {'id': c.id, 'full_name': c.full_name, 'phone': c.phone}
+    return None
+
+
+@router.post('/{caregiver_id}/assign/{elderly_id}', dependencies=[Depends(require_role(UserRole.admin))])
+async def assign_caregiver(caregiver_id: str, elderly_id: str, db: AsyncSession = Depends(get_db)):
+    """Assign an elderly user to a caregiver (writes to person_watchers + preferences)."""
+    caregiver = (await db.execute(select(User).where(User.id == caregiver_id))).scalar_one_or_none()
+    elderly = (await db.execute(select(User).where(User.id == elderly_id))).scalar_one_or_none()
+    if not caregiver or not elderly:
+        raise HTTPException(status_code=404, detail='User not found')
+
+    # Write to person_watchers
+    existing = (await db.execute(
+        select(PersonWatcher).where(PersonWatcher.user_id == caregiver_id, PersonWatcher.person_id == elderly_id)
+    )).scalar_one_or_none()
+    if not existing:
+        db.add(PersonWatcher(user_id=caregiver_id, person_id=elderly_id))
+
+    # Also keep preferences in sync
+    prefs = dict(caregiver.preferences or {})
+    assigned = list(prefs.get('assigned_user_ids') or [])
+    if elderly_id not in assigned:
+        assigned.append(elderly_id)
+    prefs['assigned_user_ids'] = assigned
+    caregiver.preferences = prefs
+
+    await db.commit()
+    return {'ok': True}
+
+
+@router.delete('/{caregiver_id}/assign/{elderly_id}', dependencies=[Depends(require_role(UserRole.admin))])
+async def unassign_caregiver(caregiver_id: str, elderly_id: str, db: AsyncSession = Depends(get_db)):
+    """Remove the assignment between a caregiver and elderly user."""
+    pw = (await db.execute(
+        select(PersonWatcher).where(PersonWatcher.user_id == caregiver_id, PersonWatcher.person_id == elderly_id)
+    )).scalar_one_or_none()
+    if pw:
+        await db.delete(pw)
+
+    caregiver = (await db.execute(select(User).where(User.id == caregiver_id))).scalar_one_or_none()
+    if caregiver:
+        prefs = dict(caregiver.preferences or {})
+        assigned = [i for i in (prefs.get('assigned_user_ids') or []) if i != elderly_id]
+        prefs['assigned_user_ids'] = assigned
+        caregiver.preferences = prefs
+
+    await db.commit()
+    return {'ok': True}
 
 
 @router.delete('/{user_id}', dependencies=[Depends(require_role(UserRole.admin))])

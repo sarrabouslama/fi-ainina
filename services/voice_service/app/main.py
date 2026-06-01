@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import shutil, os, httpx, threading
@@ -8,6 +9,15 @@ from app.redis_listener import start_redis_listener
 from app.wake_word import start_wake_word_detector
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000",
+                   "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Start Redis listener in background when server starts
 @app.on_event("startup")
@@ -39,7 +49,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
 @app.post("/speak")
 def speak_text(input: TextInput):
     output_path = "response.wav"
-    speak(input.text, output_path)
+    speak(input.text, output_path, speed=input.speed)
     return FileResponse(output_path, media_type="audio/wav")
 
 # ── Full pipeline: audio → LLM → audio ───────────────────
@@ -55,7 +65,7 @@ async def full_pipeline(file: UploadFile = File(...)):
 
     # Step 2: send to LLM service (P1)
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=90) as client:
             response = await client.post(
                 "http://localhost:8001/chat",
                 json={
@@ -68,7 +78,7 @@ async def full_pipeline(file: UploadFile = File(...)):
             llm_response = response.json().get("response", "Je n'ai pas compris.")
     except Exception as e:
         print(f" LLM service not available: {e}")
-        llm_response = f"J'ai bien entendu: {text}"
+        llm_response = "Je suis désolée, je n'arrive pas à joindre mon service de réponse. Veuillez réessayer dans quelques instants."
 
     print(f" LLM response: {llm_response}")
 
