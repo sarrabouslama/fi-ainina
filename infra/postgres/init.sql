@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS person_watchers (
 );
 
 CREATE TABLE IF NOT EXISTS alert_log (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_id    UUID,
+    id          VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    event_id    VARCHAR(36),
     event_type  VARCHAR(50) NOT NULL,
     channel     VARCHAR(20) NOT NULL,
     recipient   VARCHAR(255) NOT NULL,
@@ -50,13 +50,13 @@ CREATE INDEX IF NOT EXISTS idx_alert_log_created_at ON alert_log(created_at DESC
 INSERT INTO users (id, email, phone, hashed_password, full_name, role, is_active, consent_given, consent_date, preferences, created_at)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
-    'admin@fiainina.local',
+    'admin@fiainina.com',
     '+12345678',
-    '$2b$12$LQv3c1yqBwEHFr3HGDoMjuG6P6Z.B0j.zN9Mq5KpjPEZGt.TTGQTC',
+    '$2b$12$wFTwGIZ77xDF2W4.HM66AOCxhPal2v.NuIjTjhE/Qmtqw.BlSuwCi',
     'Admin Developer',
     'admin',
     TRUE,
-    FALSE,
+    TRUE,
     NULL,
     NULL,
     NOW()

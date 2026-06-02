@@ -8,7 +8,6 @@ import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
-from uuid import UUID
 
 from app import config
 from app.enums import UserRole
@@ -50,19 +49,10 @@ async def get_database_session(engine):
 
 async def get_alert_recipients(session: AsyncSession, person_id: str) -> list[dict]:
     """
-    Get all recipients (family + caregivers) for a monitored person.
-    
+    Get all caregivers linked to a monitored elderly person via person_watchers.
+
     Returns list of dicts with: {user_id, name, email, phone, role}
     """
-    try:
-        UUID(str(person_id))
-    except (TypeError, ValueError):
-        logger.warning(
-            "Skipping database recipient lookup for non-UUID person_id %r; using configured fallbacks",
-            person_id,
-        )
-        return []
-
     try:
         query = text("""
             SELECT 

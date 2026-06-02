@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 
 import redis
 
-from app.config import REDIS_HOST, REDIS_PORT, USER_ID
+from app import config as _cfg
+from app.config import REDIS_HOST, REDIS_PORT
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class RedisEventPublisher:
         """Publish a distress emotion event."""
         payload = DistressEventPayload(
             event_type="emotion_distress",
-            user_id=USER_ID,
+            user_id=_cfg.USER_ID,
             timestamp=_utc_now_iso(),
             severity=severity,
             confidence=confidence,
@@ -93,7 +94,7 @@ class RedisEventPublisher:
         """Publish an extreme redness alert event."""
         payload = DistressEventPayload(
             event_type="extreme_redness_detected",
-            user_id=USER_ID,
+            user_id=_cfg.USER_ID,
             timestamp=_utc_now_iso(),
             severity="high",
             confidence=1.0,
@@ -109,7 +110,7 @@ class RedisEventPublisher:
         """Publish an inactivity alert event."""
         payload = InactivityEventPayload(
             event_type="inactivity_detected",
-            user_id=USER_ID,
+            user_id=_cfg.USER_ID,
             timestamp=_utc_now_iso(),
             severity="medium",
             confidence=1.0,

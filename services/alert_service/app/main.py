@@ -88,7 +88,7 @@ async def handle_alert(event: AlertEvent):
         # Metrics should never crash processing
         logger.debug("Failed to increment alerts_received metric", exc_info=True)
     
-    # Step 1: Check cooldown
+    # Step 1: Check cooldown — record it immediately to block concurrent duplicates
     if not await cooldown_manager.can_send_alert(event.user_id, event.event_type):
         logger.info(
             "Alert skipped due to cooldown: %s/%s",
@@ -100,7 +100,9 @@ async def handle_alert(event: AlertEvent):
         except Exception:
             logger.debug("Failed to increment alerts_skipped metric", exc_info=True)
         return
-    
+    # Reserve the slot immediately so concurrent tasks see the cooldown
+    await cooldown_manager.record_alert_sent(event.user_id, event.event_type)
+
     # Step 2: Fetch recipients from database
     async with db_session_factory() as session:
         recipients = await get_alert_recipients(session, event.user_id)
@@ -127,26 +129,25 @@ async def handle_alert(event: AlertEvent):
     tasks.append(ws_manager.broadcast(ws_message))
     channel_names.append("websocket")
     
-    # Email (to caregivers in the shared backend user schema)
-    email_recipients = [r["email"] for r in recipients if r.get("email") and r["role"] in {UserRole.caregiver, UserRole.admin}]
-    if config.ENABLE_EMAIL and not email_recipients and config.ALERT_TEST_EMAIL_RECIPIENTS:
-        logger.info("Using ALERT_TEST_EMAIL_RECIPIENTS fallback for email alert")
-        email_recipients = config.ALERT_TEST_EMAIL_RECIPIENTS
+    # Email — caregivers and admins fetched from the database only
+    email_recipients = [
+        r["email"] for r in recipients
+        if r.get("email") and r["role"] in {UserRole.caregiver, UserRole.admin}
+    ]
+    if not email_recipients:
+        logger.warning("No email recipients found in database for %s", event.user_id)
 
     if config.ENABLE_EMAIL and email_recipients:
         tasks.append(email_handler.send_alert(event, email_recipients))
         channel_names.append("email")
-    
-    # SMS / WhatsApp (to caregivers)
-    sms_recipients = [r.get("phone") for r in recipients if r.get("phone") and r["role"] == UserRole.caregiver]
-    sms_recipients = [r for r in sms_recipients if r]  # Filter None values
-    if (
-        not sms_recipients
-        and config.TWILIO_CHANNEL == "whatsapp"
-        and config.ALERT_TEST_WHATSAPP_RECIPIENTS
-    ):
-        logger.info("Using ALERT_TEST_WHATSAPP_RECIPIENTS fallback for WhatsApp alert")
-        sms_recipients = config.ALERT_TEST_WHATSAPP_RECIPIENTS
+
+    # WhatsApp / SMS — caregivers' phone numbers fetched from the database only
+    sms_recipients = [
+        r["phone"] for r in recipients
+        if r.get("phone") and r["role"] == UserRole.caregiver
+    ]
+    if not sms_recipients:
+        logger.warning("No phone recipients found in database for %s", event.user_id)
 
     if sms_recipients:
         tasks.append(sms_handler.send_alert(event, sms_recipients))
@@ -180,9 +181,6 @@ async def handle_alert(event: AlertEvent):
         twilio_channel = sms_handler.channel_name
         for recipient in sms_recipients:
             await log_alert_to_database(session, event.event_type, twilio_channel, recipient, "sent")
-    
-    # Step 6: Record cooldown
-    await cooldown_manager.record_alert_sent(event.user_id, event.event_type)
     
     logger.info(f"Alert processed successfully: {event.event_type}/{event.user_id}")
 

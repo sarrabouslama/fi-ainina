@@ -15,6 +15,15 @@ class UserCreate(BaseModel):
     preferences: dict | None = None
 
 
+class CaregiverCreate(BaseModel):
+    """Used when creating a caregiver directly linked to an elderly person."""
+    email: EmailStr
+    phone: str | None = None
+    password: str
+    full_name: str
+    consent_given: bool = False
+
+
 class UserUpdate(BaseModel):
     full_name: str | None = None
     phone: str | None = None
@@ -24,7 +33,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: str          # str not EmailStr — GDPR-erased accounts use example.invalid domain
     phone: str | None = None
     full_name: str
     role: UserRole
@@ -36,3 +45,8 @@ class UserResponse(BaseModel):
 
 class ConsentUpdate(BaseModel):
     consent_given: bool
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str

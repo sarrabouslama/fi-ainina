@@ -1,327 +1,439 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
-import { Video, Smile, Camera, WifiOff, Eye, EyeOff } from 'lucide-react'
+import { Activity, Smile, WifiOff, Zap, StopCircle, Video } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
-const FEED_URLS = {
-  fall:    'http://127.0.0.1:8003/video_feed',
-  emotion: 'http://127.0.0.1:8004/video_feed',
+// ─── Service config ───────────────────────────────────────────────────────────
+const SVC = {
+  fall: {
+    key: 'fall',
+    label: 'Détection de chute',
+    icon: Activity,
+    color: '#dc2626',
+    bg: 'rgba(220,38,38,0.08)',
+    border: 'rgba(220,38,38,0.22)',
+    port: 8003,
+    feedUrl:   'http://127.0.0.1:8003/video_feed',
+    startUrl:  'http://127.0.0.1:8003/camera/start',
+    stopUrl:   'http://127.0.0.1:8003/camera/stop',
+    statusUrl: 'http://127.0.0.1:8003/status',
+    resetUrl:  'http://127.0.0.1:8003/reset',
+    badge: 'MediaPipe Pose',
+  },
+  emotion: {
+    key: 'emotion',
+    label: 'Émotion & Rougeur',
+    icon: Smile,
+    color: '#16a34a',
+    bg: 'rgba(22,163,74,0.08)',
+    border: 'rgba(22,163,74,0.22)',
+    port: 8004,
+    feedUrl:   'http://127.0.0.1:8004/video_feed',
+    startUrl:  'http://127.0.0.1:8004/camera/start',
+    stopUrl:   'http://127.0.0.1:8004/camera/stop',
+    statusUrl: 'http://127.0.0.1:8004/status',
+    resetUrl:  null,
+    badge: 'DeepFace',
+  },
 }
 
-// ─── Elderly view: they control their own camera ───────────────────────────
-function ElderlyMonitoring() {
-  const [activeCamera, setActiveCamera] = useState(null)
-  const [cameraLoading, setCameraLoading] = useState(false)
-  const [cameraError, setCameraError] = useState(null)
-  const [feedError, setFeedError] = useState(false)
+const EMOTION_COLORS = {
+  happy: '#16a34a', neutral: '#6b7280', sad: '#2563eb',
+  angry: '#dc2626', fear: '#9333ea', disgust: '#92400e', surprise: '#d97706',
+}
 
-  const toggleCamera = async (on) => {
-    setCameraLoading(true)
-    setCameraError(null)
-    try {
-      if (on) {
-        await Promise.all([
-          axios.post('http://127.0.0.1:8003/camera/start', {}, { timeout: 5000 }),
-          axios.post('http://127.0.0.1:8004/camera/start', {}, { timeout: 5000 }),
-        ])
-        setActiveCamera('both')
-      } else {
-        await Promise.allSettled([
-          axios.post('http://127.0.0.1:8003/camera/stop', {}, { timeout: 3000 }),
-          axios.post('http://127.0.0.1:8004/camera/stop', {}, { timeout: 3000 }),
-        ])
-        setActiveCamera(null)
-        setFeedError(false)
-      }
-    } catch {
-      setCameraError('Impossible d\'accéder à la caméra. Vérifiez la connexion.')
-    } finally {
-      setCameraLoading(false)
-    }
+// ─── Live emotion data panel ──────────────────────────────────────────────────
+function EmotionData({ status }) {
+  if (!status) return null
+  const redness = status.redness_level || 'none'
+  return (
+    <div className="grid grid-cols-3 gap-2 mt-3">
+      <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(45,120,45,0.1)' }}>
+        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Émotion</p>
+        <p className="font-bold text-base capitalize" style={{ color: EMOTION_COLORS[status.emotion] || 'var(--text)' }}>
+          {status.emotion || '—'}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          {status.confidence != null ? `${Math.round(status.confidence * 100)}%` : ''}
+        </p>
+      </div>
+      <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(45,120,45,0.1)' }}>
+        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Rougeur</p>
+        <p className="font-bold text-base" style={{ color: redness === 'high' ? '#dc2626' : redness === 'mild' ? '#f59e0b' : 'var(--ok)' }}>
+          {redness === 'none' ? 'Normale' : redness === 'mild' ? 'Légère' : 'Élevée'}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          {status.redness_score != null ? `score ${status.redness_score.toFixed(2)}` : ''}
+        </p>
+      </div>
+      <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(45,120,45,0.1)' }}>
+        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Inactivité</p>
+        <p className="font-bold text-base" style={{ color: (status.inactivity_seconds || 0) > 240 ? '#f59e0b' : 'var(--text)' }}>
+          {Math.floor((status.inactivity_seconds || 0) / 60)}m {(status.inactivity_seconds || 0) % 60}s
+        </p>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>sans mouvement</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Live fall state data ─────────────────────────────────────────────────────
+const FALL_COLORS = { STABLE: '#16a34a', FALLING: '#f59e0b', FALLEN: '#dc2626', ALERT: '#dc2626' }
+function FallData({ status, onReset, isAdmin }) {
+  if (!status) return null
+  const state = status.state || 'INCONNU'
+  const color = FALL_COLORS[state] || 'var(--muted)'
+  return (
+    <div className="mt-3 flex items-center gap-3 p-3 rounded-xl"
+      style={{ background: `${color}10`, border: `1px solid ${color}30` }}>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: `${color}18`, border: `2px solid ${color}40` }}>
+        <span style={{ color, fontSize: 14 }}>{state === 'STABLE' ? '✓' : '!'}</span>
+      </div>
+      <div className="flex-1">
+        <p className="font-bold text-sm" style={{ color }}>{state}</p>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          {status.is_fallen ? `Au sol depuis ${Math.round(status.fall_duration_seconds || 0)}s` : 'Aucune chute détectée'}
+        </p>
+      </div>
+      {status.is_fallen && isAdmin && (
+        <button onClick={onReset}
+          className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+          style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+          Reset
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Single camera card ───────────────────────────────────────────────────────
+function CameraCard({ svcKey, active, onActivate, onStop, loading, serviceOnline, statusData, isAdmin }) {
+  const svc = SVC[svcKey]
+  const Icon = svc.icon
+  const [feedOk, setFeedOk] = useState(false)
+
+  // Reset feed state when activation changes
+  useEffect(() => { if (!active) setFeedOk(false) }, [active])
+
+  const resetFall = async () => {
+    try { await axios.post(svc.resetUrl, {}, { timeout: 3000 }) } catch {}
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <div className="mb-8 animate-fade-up">
-        <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>
-          Ma Surveillance
-        </h1>
-        <p className="text-sm" style={{ color: 'var(--text2)' }}>
-          Contrôlez votre caméra de surveillance à tout moment
-        </p>
-      </div>
+    <div className="glass rounded-2xl overflow-hidden animate-fade-up flex flex-col"
+      style={{ border: active ? `1.5px solid ${svc.border}` : undefined }}>
 
-      <div className="glass rounded-2xl p-6 mb-5 animate-fade-up">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: activeCamera ? 'rgba(239,68,68,0.1)' : 'rgba(30,107,46,0.1)' }}>
-            {activeCamera ? <Eye size={20} style={{ color: 'var(--danger)' }} /> : <EyeOff size={20} style={{ color: 'var(--ok)' }} />}
-          </div>
-          <div>
-            <p className="font-semibold" style={{ color: 'var(--text)' }}>
-              Surveillance {activeCamera ? 'activée' : 'désactivée'}
+      {/* Card header */}
+      <div className="flex items-center gap-3 px-5 py-4"
+        style={{ borderBottom: `1px solid ${active ? svc.border : 'rgba(45,120,45,0.08)'}`, background: active ? svc.bg : 'transparent' }}>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: active ? svc.bg : 'rgba(0,0,0,0.04)', border: `1px solid ${active ? svc.border : 'rgba(0,0,0,0.06)'}` }}>
+          <Icon size={18} style={{ color: active ? svc.color : 'var(--muted)' }} />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-display font-bold text-sm" style={{ color: active ? svc.color : 'var(--text)' }}>
+              {svc.label}
             </p>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              {activeCamera
-                ? 'Détection de chute + reconnaissance d\'émotion actives'
-                : 'Aucune surveillance active — vous êtes seul(e)'}
-            </p>
+            {active && feedOk && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                EN DIRECT
+              </span>
+            )}
           </div>
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+            {serviceOnline ? `Service actif · port ${svc.port} · ${svc.badge}` : `Service hors ligne · port ${svc.port}`}
+          </p>
         </div>
 
-        {cameraError && (
-          <div className="mb-4 px-3 py-2 rounded-xl text-xs"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)' }}>
-            {cameraError}
+        {/* Action button */}
+        {!active ? (
+          <button
+            disabled={loading || !serviceOnline}
+            onClick={onActivate}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+            style={{
+              background: serviceOnline ? svc.color : 'rgba(0,0,0,0.06)',
+              color: serviceOnline ? '#fff' : 'var(--muted)',
+              opacity: loading ? 0.6 : 1,
+              cursor: serviceOnline ? 'pointer' : 'not-allowed',
+            }}>
+            <Video size={14} />
+            {loading ? 'Démarrage...' : 'Activer'}
+          </button>
+        ) : (
+          <button
+            disabled={loading}
+            onClick={onStop}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)' }}>
+            <StopCircle size={14} />
+            Arrêter
+          </button>
+        )}
+      </div>
+
+      {/* Camera feed */}
+      <div style={{ background: '#0a0a0a', minHeight: active ? 280 : 80, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'min-height 0.3s ease' }}>
+        {active ? (
+          <>
+            <img
+              src={svc.feedUrl}
+              alt={svc.label}
+              onLoad={() => setFeedOk(true)}
+              onError={() => setFeedOk(false)}
+              style={{ maxWidth: '100%', maxHeight: 420, display: feedOk ? 'block' : 'none', margin: '0 auto' }}
+            />
+            {!feedOk && (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <WifiOff size={22} style={{ color: '#444' }} />
+                <p className="text-xs" style={{ color: '#555' }}>Connexion au flux vidéo...</p>
+                <p className="text-xs" style={{ color: '#444' }}>port {svc.port}/video_feed</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 py-5">
+            <Icon size={22} style={{ color: '#333' }} />
+            <p className="text-xs font-medium" style={{ color: '#444' }}>
+              {serviceOnline ? 'Appuyez sur Activer pour démarrer' : `Service non disponible sur le port ${svc.port}`}
+            </p>
           </div>
         )}
-
-        <div className="flex gap-3">
-          <button
-            disabled={cameraLoading || !!activeCamera}
-            onClick={() => toggleCamera(true)}
-            className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all"
-            style={{
-              background: activeCamera ? 'rgba(30,107,46,0.08)' : 'var(--green)',
-              color: activeCamera ? 'var(--muted)' : '#fff',
-              opacity: cameraLoading ? 0.6 : 1,
-              cursor: activeCamera ? 'default' : 'pointer',
-            }}>
-            Activer la surveillance
-          </button>
-          <button
-            disabled={cameraLoading || !activeCamera}
-            onClick={() => toggleCamera(false)}
-            className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all"
-            style={{
-              background: !activeCamera ? 'rgba(239,68,68,0.05)' : 'rgba(239,68,68,0.1)',
-              color: !activeCamera ? 'var(--muted)' : 'var(--danger)',
-              border: `1px solid ${!activeCamera ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.3)'}`,
-              opacity: cameraLoading ? 0.6 : 1,
-              cursor: !activeCamera ? 'default' : 'pointer',
-            }}>
-            Désactiver
-          </button>
-        </div>
       </div>
 
-      {/* Live camera feeds */}
-      {activeCamera && (
-        <div className="glass rounded-2xl overflow-hidden mb-5 animate-fade-up">
-          <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'rgba(45,120,45,0.12)' }}>
-            <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: 'var(--danger)' }} />
-            <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>Flux caméra en direct</p>
-          </div>
-          <div className="grid grid-cols-2" style={{ background: '#000' }}>
-            {/* Fall detection feed */}
-            <div style={{ position: 'relative', borderRight: '1px solid #222' }}>
-              <p className="text-xs font-semibold px-2 py-1 absolute top-0 left-0 z-10"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                Détection chute
-              </p>
-              <img src={FEED_URLS.fall} alt="Chute"
-                onError={e => e.currentTarget.style.display = 'none'}
-                style={{ width: '100%', display: 'block', minHeight: 180 }} />
-            </div>
-            {/* Emotion detection feed */}
-            <div style={{ position: 'relative' }}>
-              <p className="text-xs font-semibold px-2 py-1 absolute top-0 left-0 z-10"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                Émotion
-              </p>
-              <img src={FEED_URLS.emotion} alt="Émotion"
-                onError={e => e.currentTarget.style.display = 'none'}
-                style={{ width: '100%', display: 'block', minHeight: 180 }} />
-            </div>
-          </div>
+      {/* Live data (shown only when active) */}
+      {active && (
+        <div className="px-4 pb-4">
+          {svcKey === 'emotion'
+            ? <EmotionData status={statusData} />
+            : <FallData status={statusData} onReset={resetFall} isAdmin={isAdmin} />}
         </div>
       )}
-
-      <div className="glass rounded-2xl p-5 animate-fade-up delay-100">
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          <span className="font-semibold" style={{ color: 'var(--text2)' }}>Confidentialité</span> —
-          Vous pouvez désactiver la caméra à tout moment. Vos données de surveillance restent locales
-          et ne sont jamais transmises à l'extérieur, conformément au RGPD.
-        </p>
-      </div>
     </div>
   )
 }
 
-// ─── Admin / Caregiver view: read-only status of the elderly's monitoring ──
-function StaffMonitoring() {
-  const { user } = useAuth()
-  const [fallEvents, setFallEvents] = useState([])
-  const [fallStatus, setFallStatus] = useState(null)
-  const [feedError, setFeedError] = useState(false)
-  const [showFeed, setShowFeed] = useState(false)
+// ─── Alert test panel ─────────────────────────────────────────────────────────
+function AlertTestPanel({ lastAlert }) {
+  const [sending, setSending] = useState(null)
+  const [result, setResult] = useState(null)
 
+  const fire = async (eventType, label, meta) => {
+    setSending(eventType); setResult(null)
+    try {
+      await axios.post('http://127.0.0.1:8005/alerts/test', {
+        event_type: eventType,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        severity: 'high',
+        metadata: meta,
+      }, { timeout: 5000 })
+      setResult({ ok: true, label })
+    } catch (e) {
+      setResult({ ok: false, label, error: e?.response?.data?.detail || e.message })
+    } finally { setSending(null) }
+  }
+
+  return (
+    <div className="glass rounded-2xl p-5 animate-fade-up">
+      <div className="flex items-center gap-2 mb-4">
+        <Zap size={15} style={{ color: '#f59e0b' }} />
+        <p className="font-display font-semibold text-sm" style={{ color: 'var(--text)' }}>
+          Test pipeline d'alertes
+        </p>
+        <span className="text-xs px-2 py-0.5 rounded-full ml-auto font-medium"
+          style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+          WebSocket + Email + WhatsApp
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        {[
+          { key: 'emotion_distress',         label: 'Émotion détresse', color: '#9333ea', meta: { emotion: 'angry', score: 0.92 } },
+          { key: 'extreme_redness_detected', label: 'Rougeur extrême',  color: '#dc2626', meta: { redness_score: 0.48, redness_level: 'high' } },
+          { key: 'inactivity_detected',      label: 'Inactivité',       color: '#f59e0b', meta: { duration_seconds: 320 } },
+        ].map(({ key, label, color, meta }) => (
+          <button key={key} disabled={!!sending} onClick={() => fire(key, label, meta)}
+            className="px-4 py-2 rounded-xl text-xs font-semibold transition-all"
+            style={{ background: `${color}10`, color, border: `1px solid ${color}25`, opacity: sending && sending !== key ? 0.5 : 1 }}>
+            {sending === key ? 'Envoi...' : `▶ ${label}`}
+          </button>
+        ))}
+      </div>
+
+      {result && (
+        <div className="px-3 py-2 rounded-xl text-xs font-medium mb-2"
+          style={{ background: result.ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', color: result.ok ? '#16a34a' : '#dc2626' }}>
+          {result.ok ? `✓ "${result.label}" envoyée — vérifiez la notification + WhatsApp` : `✗ ${result.error}`}
+        </div>
+      )}
+
+      {lastAlert && (
+        <div className="px-3 py-2 rounded-xl text-xs"
+          style={{ background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(45,120,45,0.1)' }}>
+          <span className="font-semibold" style={{ color: 'var(--text)' }}>Dernière alerte : </span>
+          <span style={{ color: 'var(--muted)' }}>
+            {lastAlert.event_type} · {lastAlert.severity} · {lastAlert._ts ? new Date(lastAlert._ts).toLocaleTimeString('fr-FR') : ''}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function MonitoringPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
+  // Which camera is active: null | 'fall' | 'emotion'
+  const [activeCamera, setActiveCamera] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Service online status
+  const [online, setOnline] = useState({ fall: false, emotion: false })
+
+  // Live status data
+  const [fallStatus, setFallStatus] = useState(null)
+  const [emotionStatus, setEmotionStatus] = useState(null)
+
+  // Alert WebSocket
+  const [alertWsConnected, setAlertWsConnected] = useState(false)
+  const [lastAlert, setLastAlert] = useState(null)
+  const wsRef = useRef(null)
+
+  // Poll both service statuses
   useEffect(() => {
-    const load = async () => {
+    const poll = async () => {
+      // Fall service
       try {
-        const [s, e] = await Promise.all([
-          axios.get('http://localhost:8003/status', { timeout: 2000 }),
-          axios.get('http://localhost:8003/events?limit=20', { timeout: 2000 }),
-        ])
-        setFallStatus(s.data)
-        setFallEvents(e.data?.events || [])
-      } catch {}
+        const r = await axios.get('http://127.0.0.1:8003/status', { timeout: 2000 })
+        setFallStatus(r.data)
+        setOnline(o => ({ ...o, fall: true }))
+      } catch {
+        setFallStatus(null)
+        setOnline(o => ({ ...o, fall: false }))
+      }
+      // Emotion service
+      try {
+        const r = await axios.get('http://127.0.0.1:8004/status', { timeout: 2000 })
+        setEmotionStatus(r.data)
+        setOnline(o => ({ ...o, emotion: true }))
+      } catch {
+        setEmotionStatus(null)
+        setOnline(o => ({ ...o, emotion: false }))
+      }
     }
-    load()
-    const t = setInterval(load, 3000)
+    poll()
+    const t = setInterval(poll, 3000)
     return () => clearInterval(t)
   }, [])
 
-  const fallState = fallStatus?.state || 'INCONNU'
-  const isFallen = fallStatus?.is_fallen
-  const stateColors = { STABLE: 'var(--ok)', FALLING: 'var(--warn)', FALLEN: 'var(--danger)', ALERT: '#dc2626' }
+  // Alert WebSocket (port 8005)
+  useEffect(() => {
+    const connect = () => {
+      try {
+        const ws = new WebSocket('ws://127.0.0.1:8005/ws')
+        wsRef.current = ws
+        ws.onopen  = () => setAlertWsConnected(true)
+        ws.onclose = () => { setAlertWsConnected(false); setTimeout(connect, 4000) }
+        ws.onerror = () => setAlertWsConnected(false)
+        ws.onmessage = (e) => {
+          try { setLastAlert({ ...JSON.parse(e.data), _ts: new Date().toISOString() }) } catch {}
+        }
+      } catch { setAlertWsConnected(false) }
+    }
+    connect()
+    return () => wsRef.current?.close()
+  }, [])
+
+  // Activate a camera (stops the other one first)
+  const activate = useCallback(async (key) => {
+    setLoading(true)
+    setError(null)
+    try {
+      // Stop the other service camera first (they share the physical camera)
+      const otherKey = key === 'fall' ? 'emotion' : 'fall'
+      if (activeCamera === otherKey) {
+        try { await axios.post(SVC[otherKey].stopUrl, {}, { timeout: 3000 }) } catch {}
+      }
+      // Start the selected service camera
+      await axios.post(SVC[key].startUrl, {}, { timeout: 6000 })
+      setActiveCamera(key)
+    } catch {
+      setError(`Impossible de démarrer la caméra — service port ${SVC[key].port} non disponible.`)
+    } finally {
+      setLoading(false)
+    }
+  }, [activeCamera])
+
+  // Stop current camera
+  const stop = useCallback(async (key) => {
+    setLoading(true)
+    try { await axios.post(SVC[key].stopUrl, {}, { timeout: 3000 }) } catch {}
+    setActiveCamera(null)
+    setLoading(false)
+  }, [])
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="mb-8 animate-fade-up">
-        <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>
+    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-5">
+
+      {/* Header */}
+      <div className="animate-fade-up">
+        <h1 className="font-display text-2xl font-bold mb-0.5" style={{ color: 'var(--text)' }}>
           Surveillance en temps réel
         </h1>
-        <p className="text-sm" style={{ color: 'var(--text2)' }}>
-          État de la détection de chute du résident · Lecture seule
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm" style={{ color: 'var(--text2)' }}>
+            Activez un mode de détection pour démarrer la caméra
+          </p>
+          <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${alertWsConnected ? '' : 'opacity-60'}`}
+            style={{ background: alertWsConnected ? 'rgba(22,163,74,0.08)' : 'rgba(0,0,0,0.05)', color: alertWsConnected ? '#16a34a' : 'var(--muted)' }}>
+            <span className={`w-1.5 h-1.5 rounded-full ${alertWsConnected ? 'animate-pulse bg-green-500' : 'bg-gray-400'}`} />
+            Alertes {alertWsConnected ? 'connectées' : 'déconnectées'}
+          </span>
+        </div>
       </div>
 
-      {/* Current state banner */}
-      <div className="glass rounded-2xl p-5 mb-5 animate-fade-up">
-        {fallStatus ? (
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: `${stateColors[fallState] || 'var(--muted)'}15`, border: `2px solid ${stateColors[fallState] || 'var(--muted)'}40` }}>
-              <span className="text-xl">{fallState === 'STABLE' ? '✓' : fallState === 'ALERT' ? '!' : '▲'}</span>
-            </div>
-            <div className="flex-1">
-              <p className="font-display font-bold text-xl" style={{ color: stateColors[fallState] || 'var(--text)' }}>
-                {fallState}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                {isFallen
-                  ? `Le résident est au sol depuis ${Math.round(fallStatus.fall_duration_seconds || 0)}s`
-                  : fallState === 'STABLE' ? 'Le résident va bien — aucune chute détectée' : 'Mouvement rapide détecté'}
-              </p>
-            </div>
-            {isFallen && user?.role === 'admin' && (
-              <button onClick={async () => { try { await axios.post('http://localhost:8003/reset') } catch {} }}
-                className="btn-secondary text-sm px-4 py-2">
-                Réinitialiser
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <WifiOff size={20} style={{ color: 'var(--muted)' }} />
-            <div>
-              <p className="font-semibold" style={{ color: 'var(--text2)' }}>Service non disponible</p>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>Le service de détection (port 8003) ne répond pas</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Live feed toggle for admin */}
-      {user?.role === 'admin' && fallStatus && (
-        <div className="glass rounded-2xl p-5 mb-5 animate-fade-up">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Flux vidéo en direct</h3>
-            <button onClick={() => { setShowFeed(f => !f); setFeedError(false) }}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
-              style={{ background: showFeed ? 'rgba(239,68,68,0.1)' : 'rgba(30,107,46,0.1)', color: showFeed ? 'var(--danger)' : 'var(--green)' }}>
-              {showFeed ? 'Masquer le flux' : 'Afficher le flux'}
-            </button>
-          </div>
-          {showFeed && (
-            <div className="rounded-xl overflow-hidden" style={{ background: '#000', minHeight: 240 }}>
-              {feedError ? (
-                <div className="flex flex-col items-center justify-center py-10">
-                  <WifiOff size={24} className="mb-2" style={{ color: 'var(--muted)', opacity: 0.5 }} />
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>Flux vidéo non disponible</p>
-                </div>
-              ) : (
-                <img src={FEED_URLS.fall} alt="Camera"
-                  onError={() => setFeedError(true)} onLoad={() => setFeedError(false)}
-                  style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }} />
-              )}
-            </div>
-          )}
+      {/* Error banner */}
+      {error && (
+        <div className="px-4 py-3 rounded-2xl text-sm"
+          style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', border: '1px solid rgba(220,38,38,0.15)' }}>
+          {error}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-5">
-        {/* Fall state machine */}
-        <div className="glass rounded-2xl p-5 animate-fade-up">
-          <h3 className="font-display font-semibold text-sm mb-4" style={{ color: 'var(--text)' }}>Machine à états</h3>
-          {fallStatus ? (
-            <div className="flex flex-col gap-3">
-              {['STABLE', 'FALLING', 'FALLEN', 'ALERT'].map(state => {
-                const active = fallStatus.state === state
-                const colors = { STABLE: 'var(--ok)', FALLING: 'var(--warn)', FALLEN: 'var(--danger)', ALERT: '#dc2626' }
-                return (
-                  <div key={state} className="flex items-center gap-3 p-3 rounded-xl"
-                    style={{
-                      background: active ? `${colors[state]}12` : 'rgba(255,255,255,0.5)',
-                      border: `1px solid ${active ? colors[state] + '40' : 'rgba(45,120,45,0.1)'}`,
-                    }}>
-                    <div className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background: active ? colors[state] : 'var(--border2)' }} />
-                    <p className="font-bold text-sm flex-1" style={{ color: active ? colors[state] : 'var(--muted)' }}>
-                      {state}
-                    </p>
-                    {active && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                        style={{ background: `${colors[state]}20`, color: colors[state] }}>
-                        ACTIF
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <WifiOff size={24} className="mx-auto mb-2" style={{ color: 'var(--muted)', opacity: 0.4 }} />
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Service hors ligne</p>
-            </div>
-          )}
-        </div>
-
-        {/* Events */}
-        <div className="glass rounded-2xl p-5 animate-fade-up delay-100">
-          <h3 className="font-display font-semibold text-sm mb-4" style={{ color: 'var(--text)' }}>
-            Événements récents ({fallEvents.length})
-          </h3>
-          {fallEvents.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Aucun événement détecté</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--muted)', opacity: 0.7 }}>Le résident va bien</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
-              {fallEvents.map((e, i) => (
-                <div key={i} className="px-3 py-2.5 rounded-xl text-xs"
-                  style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(45,120,45,0.12)' }}>
-                  <div className="flex justify-between">
-                    <span className="font-bold" style={{ color: 'var(--text)' }}>{e.event || e.event_type}</span>
-                    <span style={{ color: 'var(--muted)' }}>
-                      {e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString('fr-FR') : ''}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Two camera cards */}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <CameraCard
+          svcKey="fall"
+          active={activeCamera === 'fall'}
+          onActivate={() => activate('fall')}
+          onStop={() => stop('fall')}
+          loading={loading}
+          serviceOnline={online.fall}
+          statusData={fallStatus}
+          isAdmin={isAdmin}
+        />
+        <CameraCard
+          svcKey="emotion"
+          active={activeCamera === 'emotion'}
+          onActivate={() => activate('emotion')}
+          onStop={() => stop('emotion')}
+          loading={loading}
+          serviceOnline={online.emotion}
+          statusData={emotionStatus}
+          isAdmin={isAdmin}
+        />
       </div>
+
+      {/* Alert test panel */}
+      <AlertTestPanel lastAlert={lastAlert} />
+
     </div>
   )
-}
-
-export default function MonitoringPage() {
-  const { user } = useAuth()
-  if (user?.role === 'elderly') return <ElderlyMonitoring />
-  return <StaffMonitoring />
 }

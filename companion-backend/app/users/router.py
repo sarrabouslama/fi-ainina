@@ -8,7 +8,8 @@ from app.auth.dependencies import get_current_user, require_role
 from app.database import get_db
 from app.models import ConversationMessage, ConversationSession, PersonWatcher, User
 from app.security import hash_password
-from app.users.schemas import ConsentUpdate, UserCreate, UserResponse, UserUpdate
+from app.users.schemas import CaregiverCreate, ConsentUpdate, PasswordChange, UserCreate, UserResponse, UserUpdate
+from app.security import verify_password
 from app.enums import UserRole
 
 
@@ -31,6 +32,11 @@ def to_response(user: User) -> UserResponse:
 
 @router.post('', response_model=UserResponse, dependencies=[Depends(require_role(UserRole.admin))])
 async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    if payload.role == UserRole.caregiver:
+        raise HTTPException(
+            status_code=422,
+            detail='Caregivers must be created via POST /users/{elderly_id}/caregivers'
+        )
     exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=409, detail='Email exists')
@@ -40,12 +46,23 @@ async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         role=payload.role,
+        consent_given=payload.consent_given,
+        consent_date=datetime.utcnow() if payload.consent_given else None,
         preferences=payload.preferences,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return to_response(user)
+
+
+@router.get('/elderly/active')
+async def list_active_elderly(db: AsyncSession = Depends(get_db)):
+    """Internal endpoint — microservices call this at startup to discover active elderly users."""
+    users = (await db.execute(
+        select(User).where(User.role == UserRole.elderly, User.is_active == True)
+    )).scalars().all()
+    return [{'id': u.id, 'full_name': u.full_name, 'phone': u.phone} for u in users]
 
 
 @router.get('', response_model=list[UserResponse], dependencies=[Depends(require_role(UserRole.admin))])
@@ -55,9 +72,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 
 
 @router.get('/{user_id}', response_model=UserResponse)
-async def get_user(user_id: str, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role != UserRole.admin and current.id != user_id:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def get_user(user_id: str, _: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail='Not found')
@@ -146,6 +161,66 @@ async def unassign_caregiver(caregiver_id: str, elderly_id: str, db: AsyncSessio
     return {'ok': True}
 
 
+@router.post('/{elderly_id}/caregivers', response_model=UserResponse)
+async def create_caregiver_for_elderly(elderly_id: str, payload: CaregiverCreate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Create a new caregiver and immediately link them to an elderly person.
+    Allowed for: admin (any elderly) or the elderly user themselves."""
+    if current.role != UserRole.admin and current.id != elderly_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    elderly = (await db.execute(
+        select(User).where(User.id == elderly_id, User.role == UserRole.elderly)
+    )).scalar_one_or_none()
+    if not elderly:
+        raise HTTPException(status_code=404, detail='Elderly user not found')
+    exists = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+    if exists:
+        raise HTTPException(status_code=409, detail='Email exists')
+    caregiver = User(
+        email=payload.email,
+        phone=payload.phone,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
+        role=UserRole.caregiver,
+        consent_given=payload.consent_given,
+        consent_date=datetime.utcnow() if payload.consent_given else None,
+    )
+    db.add(caregiver)
+    await db.flush()
+    db.add(PersonWatcher(user_id=caregiver.id, person_id=elderly_id))
+    await db.commit()
+    await db.refresh(caregiver)
+    return to_response(caregiver)
+
+
+@router.get('/{elderly_id}/caregivers', response_model=list[UserResponse])
+async def list_caregivers_for_elderly(elderly_id: str, _: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """List all caregivers linked to an elderly user."""
+    caregivers = (await db.execute(
+        select(User)
+        .join(PersonWatcher, PersonWatcher.user_id == User.id)
+        .where(PersonWatcher.person_id == elderly_id)
+    )).scalars().all()
+    return [to_response(c) for c in caregivers]
+
+
+@router.delete('/{elderly_id}/caregivers/{caregiver_id}')
+async def unlink_caregiver_from_elderly(elderly_id: str, caregiver_id: str, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Unlink a caregiver from an elderly user (does not delete the caregiver account).
+    Allowed for: admin (any elderly) or the elderly user themselves."""
+    if current.role != UserRole.admin and current.id != elderly_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    pw = (await db.execute(
+        select(PersonWatcher).where(
+            PersonWatcher.user_id == caregiver_id,
+            PersonWatcher.person_id == elderly_id,
+        )
+    )).scalar_one_or_none()
+    if pw:
+        await db.delete(pw)
+        await db.commit()
+    return {'ok': True}
+
+
 @router.delete('/{user_id}', dependencies=[Depends(require_role(UserRole.admin))])
 async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     from sqlalchemy import delete as sql_delete
@@ -171,6 +246,22 @@ async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
     ))
 
     await db.delete(user)
+    await db.commit()
+    return {'ok': True}
+
+
+@router.post('/{user_id}/change-password')
+async def change_password(user_id: str, payload: PasswordChange, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    if current.role != UserRole.admin and current.id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail='Not found')
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail='Mot de passe actuel incorrect')
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=422, detail='Le nouveau mot de passe doit contenir au moins 6 caractères')
+    user.hashed_password = hash_password(payload.new_password)
     await db.commit()
     return {'ok': True}
 

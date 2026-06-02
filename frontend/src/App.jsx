@@ -14,6 +14,7 @@ import MonitoringPage from './pages/MonitoringPage'
 import ConversationsPage from './pages/ConversationsPage'
 import UsersPage from './pages/UsersPage'
 import ReviewsPage from './pages/ReviewsPage'
+import ProfilePage from './pages/ProfilePage'
 
 function RequireAuth({ children, roles }) {
   const { user, loading } = useAuth()
@@ -206,6 +207,20 @@ function InnerApp() {
       <Route path="/reviews" element={
         <RequireAuth>
           <AppLayout wsConnected={wsConnected}><ReviewsPage /></AppLayout>
+        </RequireAuth>
+      } />
+
+      {/* Profile — self */}
+      <Route path="/profile" element={
+        <RequireAuth>
+          <AppLayout wsConnected={wsConnected}><ProfilePage /></AppLayout>
+        </RequireAuth>
+      } />
+
+      {/* Profile — view any user (all roles can view, edit rules enforced inside) */}
+      <Route path="/profile/:userId" element={
+        <RequireAuth>
+          <AppLayout wsConnected={wsConnected}><ProfilePage /></AppLayout>
         </RequireAuth>
       } />
 

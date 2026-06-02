@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LayoutDashboard, Mic, Bell, Activity, Users, MessageSquare, Star, LogOut } from 'lucide-react'
+import { LayoutDashboard, Mic, Bell, Activity, Users, MessageSquare, Star, LogOut, UserCircle } from 'lucide-react'
 
 // Nav items per role — each role sees only what's relevant to them
 const NAV_BY_ROLE = {
@@ -81,16 +81,21 @@ export default function TopNav({ wsConnected }) {
         <div className="w-px h-6" style={{ background: 'rgba(0,0,0,0.08)' }} />
 
         {user && (
-          <div className="flex items-center gap-3">
+          <Link to="/profile" title="Mon profil"
+            className="flex items-center gap-3 rounded-xl px-2 py-1 transition-all"
+            style={{ background: pathname === '/profile' ? `${roleColor}10` : 'transparent' }}>
             <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
               style={{ background: `${roleColor}20`, color: roleColor, border: `1px solid ${roleColor}30` }}>
               {user.full_name?.[0] || '?'}
             </div>
             <div className="hidden md:block">
               <p className="text-sm font-semibold leading-none" style={{ color: 'var(--text)' }}>{user.full_name}</p>
-              <p className="text-xs mt-0.5" style={{ color: roleColor }}>{ROLE_LABELS[user.role] || user.role}</p>
+              <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: roleColor }}>
+                {ROLE_LABELS[user.role] || user.role}
+                <UserCircle size={10} />
+              </p>
             </div>
-          </div>
+          </Link>
         )}
 
         <button onClick={handleLogout}

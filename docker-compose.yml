@@ -55,7 +55,7 @@ services:
       - fi_ainina_net
 
   nginx:
-    build: ./nginx
+    build: ./infra/nginx
     container_name: fi_ainina_nginx
     restart: unless-stopped
     ports:
@@ -67,6 +67,30 @@ services:
       - fall_detection_service
       - emotion_service
       - alert_service
+    networks:
+      - fi_ainina_net
+
+  # ─────────────────────────────────────────
+  # COMPANION BACKEND — API Gateway (Port 8000)
+  # ─────────────────────────────────────────
+  companion_backend:
+    build: ./companion-backend
+    container_name: fi_ainina_companion
+    restart: unless-stopped
+    env_file:
+      - ./companion-backend/.env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request, sys; r=urllib.request.urlopen('http://localhost:8000/'); sys.exit(0 if r.status == 200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - fi_ainina_net
 
@@ -195,6 +219,12 @@ services:
     env_file:
       - .env
       - ./services/alert_service/.env
+    environment:
+      # Override .env mismatches so the service connects to the shared postgres
+      - DATABASE_URL=postgresql://postgres_user:fiainina2024@postgres:5432/fi_ainina
+      - REDIS_URL=redis://redis:6379/0
+      - ALERT_REDIS_CHANNELS=emotion_events,fall_events
+      - ENABLE_SMS=true
     ports:
       - "8005:8005"
     healthcheck:

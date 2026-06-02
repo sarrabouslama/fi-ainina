@@ -56,7 +56,7 @@ def analyze_emotion(face_region) -> EmotionAnalysisResult:
     global _DEEPFACE_AVAILABLE, DeepFace
 
     
-    if face_region is None or getattr(face_region, "size", 0) == 0:
+    if face_region is None or (hasattr(face_region, "size") and face_region.size == 0):
         return EmotionAnalysisResult(emotion="neutral", confidence=0.0, severity=None)
 
     # If DeepFace isn't available, return neutral without raising repeatedly.

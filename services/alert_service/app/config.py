@@ -62,6 +62,16 @@ ALERT_TEST_WHATSAPP_RECIPIENTS = _env_list("ALERT_TEST_WHATSAPP_RECIPIENTS")
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "5"))
 WS_PORT = int(os.getenv("WS_PORT", "8005"))
 
+# Per-event-type cooldown overrides (take precedence over ALERT_COOLDOWN_MINUTES).
+# 0 means "use the global value".
+_emotion_cd  = int(os.getenv("EMOTION_DISTRESS_COOLDOWN_MINUTES",  "0"))
+_redness_cd  = int(os.getenv("REDNESS_COOLDOWN_MINUTES",           "0"))
+
+COOLDOWN_PER_EVENT_TYPE: dict[str, int] = {
+    "emotion_distress":          _emotion_cd  if _emotion_cd  > 0 else ALERT_COOLDOWN_MINUTES,
+    "extreme_redness_detected":  _redness_cd  if _redness_cd  > 0 else ALERT_COOLDOWN_MINUTES,
+}
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

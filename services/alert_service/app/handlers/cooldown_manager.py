@@ -15,13 +15,14 @@ from datetime import datetime
 from inspect import isawaitable
 from typing import Union
 from redis.asyncio import Redis
+from app import config
 from app.config import ALERT_COOLDOWN_MINUTES
 
 logger = logging.getLogger(__name__)
 
 
 class CooldownManager:
-    """Manage alert cooldown using Redis."""
+    """Manage alert cooldown using Redis with per-event-type overrides."""
 
     def __init__(self, redis: Union[str, Redis]):
         if isinstance(redis, str):
@@ -31,11 +32,13 @@ class CooldownManager:
         self.cooldown_minutes = ALERT_COOLDOWN_MINUTES
 
     def _get_cooldown_key(self, user_id: str, event_type: str) -> str:
-        """Generate Redis key for cooldown tracking."""
         return f"cooldown:{user_id}:{event_type}"
 
+    def _cooldown_for(self, event_type: str) -> int:
+        """Return the cooldown in minutes for this event type."""
+        return config.COOLDOWN_PER_EVENT_TYPE.get(event_type, self.cooldown_minutes)
+
     async def _resolve(self, value):
-        """Support real async Redis clients and simple test doubles."""
         if isawaitable(value):
             return await value
         return value
@@ -43,67 +46,60 @@ class CooldownManager:
     async def can_send_alert(self, user_id: str, event_type: str) -> bool:
         """
         Check if enough time has passed to send a new alert.
-        
-        Returns:
-            True if we can send, False if still in cooldown period.
+
+        Returns True if we can send, False if still in cooldown period.
         """
+        cooldown = self._cooldown_for(event_type)
         key = self._get_cooldown_key(user_id, event_type)
-        
+
         try:
-            if self.cooldown_minutes <= 0:
-                logger.debug("Cooldown disabled; allowing alert for %s:%s", user_id, event_type)
+            if cooldown <= 0:
+                logger.debug("Cooldown disabled for %s; allowing alert", event_type)
                 return True
 
-            # Get last alert timestamp
             last_timestamp_str = await self._resolve(self.redis.get(key))
-            
+
             if last_timestamp_str is None:
-                # First alert for this (user, event_type) pair
-                logger.debug(f"First alert for {user_id}:{event_type}, no cooldown")
+                logger.debug("First alert for %s:%s, no cooldown", user_id, event_type)
                 return True
-            
+
             if isinstance(last_timestamp_str, bytes):
                 last_timestamp_str = last_timestamp_str.decode("utf-8")
 
-            # Parse timestamp
             last_timestamp = datetime.fromisoformat(last_timestamp_str)
-            now = datetime.utcnow()
-            elapsed_minutes = (now - last_timestamp).total_seconds() / 60
-            
-            if elapsed_minutes >= self.cooldown_minutes:
-                logger.debug(f"Cooldown expired: {elapsed_minutes:.1f} min >= {self.cooldown_minutes} min")
+            elapsed_minutes = (datetime.utcnow() - last_timestamp).total_seconds() / 60
+
+            if elapsed_minutes >= cooldown:
+                logger.debug("Cooldown expired for %s: %.1f min >= %d min", event_type, elapsed_minutes, cooldown)
                 return True
-            else:
-                logger.debug(
-                    f"Still in cooldown: {elapsed_minutes:.1f} min < {self.cooldown_minutes} min "
-                    f"(skipping alert for {user_id}:{event_type})"
-                )
-                return False
-                
+
+            remaining = cooldown - elapsed_minutes
+            logger.info(
+                "Alert suppressed (cooldown): %s/%s — %.1f min remaining of %d min cooldown",
+                event_type, user_id, remaining, cooldown,
+            )
+            return False
+
         except Exception as e:
-            logger.error(f"Cooldown check error: {e}", exc_info=True)
-            # On error, allow alert (fail open)
-            return True
+            logger.error("Cooldown check error: %s", e, exc_info=True)
+            return True  # fail open
 
     async def record_alert_sent(self, user_id: str, event_type: str) -> None:
-        """
-        Record that an alert was sent for this (user_id, event_type) pair.
-        Resets the cooldown timer.
-        """
+        """Record that an alert was sent, starting the cooldown timer."""
+        cooldown = self._cooldown_for(event_type)
         key = self._get_cooldown_key(user_id, event_type)
         now = datetime.utcnow().isoformat()
-        
+
         try:
-            if self.cooldown_minutes <= 0:
-                logger.debug("Cooldown disabled; not recording alert for %s:%s", user_id, event_type)
+            if cooldown <= 0:
+                logger.debug("Cooldown disabled for %s; not recording", event_type)
                 return
 
-            # Set timestamp with TTL = 2x cooldown (for cleanup)
-            ttl_seconds = self.cooldown_minutes * 60 * 2
+            ttl_seconds = cooldown * 60 * 2  # keep key for 2x cooldown for cleanup
             await self._resolve(self.redis.setex(key, ttl_seconds, now))
-            logger.debug(f"Recorded alert for {user_id}:{event_type}, TTL={ttl_seconds}s")
+            logger.info("Cooldown started for %s/%s: %d min", event_type, user_id, cooldown)
         except Exception as e:
-            logger.error(f"Failed to record alert: {e}", exc_info=True)
+            logger.error("Failed to record alert: %s", e, exc_info=True)
 
     async def reset_cooldown(self, user_id: str, event_type: str) -> None:
         """Force reset cooldown (for testing or admin override)."""
