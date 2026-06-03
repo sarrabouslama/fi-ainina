@@ -9,7 +9,7 @@ from app.tts import speak
 
 REDIS_URL = "redis://localhost:6379/0"
 CHANNEL_FALL = "fall_events"
-CHANNEL_ALERT = "fall_alerts"
+CHANNEL_ALERT = "fall_events"
 COMPANION_URL = "http://127.0.0.1:8000"
 
 _recognizer = sr.Recognizer()

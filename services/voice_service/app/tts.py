@@ -1,13 +1,16 @@
-import torch
-import torch.serialization
-from TTS.utils.radam import RAdam
-from TTS.api import TTS
+import asyncio
+import edge_tts
 
-torch.serialization.add_safe_globals([RAdam])
+VOICE = "fr-FR-DeniseNeural"  # High-quality French neural voice (no install needed)
 
-# VITS is end-to-end (no separate vocoder) → 5-10x faster than Tacotron2 on CPU
-tts = TTS(model_name="tts_models/fr/css10/vits", progress_bar=False, gpu=False)
+async def _speak_async(text: str, output_path: str, rate: str) -> None:
+    communicate = edge_tts.Communicate(text, VOICE, rate=rate)
+    await communicate.save(output_path)
 
-def speak(text: str, output_path: str = "output.wav", speed: float = 1.0):
-    tts.tts_to_file(text=text, file_path=output_path, speed=speed)
+def speak(text: str, output_path: str = "output.mp3", speed: float = 1.0) -> str:
+    # Convert speed multiplier → edge-tts rate string
+    # 1.0 → "+0%", 1.5 → "+50%", 0.8 → "-20%"
+    rate_pct = int((speed - 1.0) * 100)
+    rate_str = f"+{rate_pct}%" if rate_pct >= 0 else f"{rate_pct}%"
+    asyncio.run(_speak_async(text, output_path, rate_str))
     return output_path

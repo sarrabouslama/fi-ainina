@@ -43,13 +43,14 @@ def analyze_redness(face_region) -> RednessAnalysisResult:
     hsv_face = cv2.cvtColor(central_face, cv2.COLOR_BGR2HSV)
     b_channel, g_channel, r_channel = cv2.split(central_face)
 
-    lower_red_1 = np.array([0, 45, 50])
+    # Lower saturation bounds to catch low-saturation redness in elderly/pale skin
+    lower_red_1 = np.array([0, 20, 40])
     upper_red_1 = np.array([12, 255, 255])
-    lower_red_2 = np.array([168, 45, 50])
+    lower_red_2 = np.array([168, 20, 40])
     upper_red_2 = np.array([180, 255, 255])
 
     red_mask = cv2.inRange(hsv_face, lower_red_1, upper_red_1) | cv2.inRange(hsv_face, lower_red_2, upper_red_2)
-    skin_like_mask = cv2.inRange(hsv_face, np.array([0, 35, 35]), np.array([180, 255, 255]))
+    skin_like_mask = cv2.inRange(hsv_face, np.array([0, 15, 30]), np.array([180, 255, 255]))
     red_pixels = int(cv2.countNonZero(red_mask))
     skin_like_pixels = int(cv2.countNonZero(skin_like_mask))
     total_pixels = int(hsv_face.shape[0] * hsv_face.shape[1])
@@ -62,10 +63,12 @@ def analyze_redness(face_region) -> RednessAnalysisResult:
     mean_blue = float(np.mean(b_channel)) if total_pixels else 0.0
     dominance = max(0.0, (mean_red - max(mean_green, mean_blue)) / 255.0)
 
-    redness_score = float((red_fraction * 0.75) + (dominance * 0.25))
+    # Score only when both the red hue coverage and the red-channel dominance are
+    # present; this keeps normal skin tones from being mistaken as redness.
+    redness_score = float((red_fraction * 0.45) + (dominance * 0.55))
     redness_score = min(1.0, redness_score)
 
-    if redness_score >= REDNESS_HIGH_THRESHOLD and dominance >= 0.08 and skin_fraction >= 0.25:
+    if redness_score >= REDNESS_HIGH_THRESHOLD:
         redness_level = "high"
     elif redness_score >= REDNESS_MILD_THRESHOLD:
         redness_level = "mild"
@@ -74,8 +77,6 @@ def analyze_redness(face_region) -> RednessAnalysisResult:
 
     mean_saturation = float(np.mean(hsv_face[:, :, 1])) if total_pixels else 0.0
     redness_reliable = mean_saturation >= SATURATION_RELIABLE_THRESHOLD and skin_fraction >= 0.25
-    if not redness_reliable:
-        redness_level = "normal"
     return RednessAnalysisResult(
         redness_score=redness_score,
         redness_level=redness_level,

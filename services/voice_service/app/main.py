@@ -48,9 +48,9 @@ async def transcribe_audio(file: UploadFile = File(...)):
 # ── TTS: text → audio ─────────────────────────────────────
 @app.post("/speak")
 def speak_text(input: TextInput):
-    output_path = "response.wav"
+    output_path = "response.mp3"
     speak(input.text, output_path, speed=input.speed)
-    return FileResponse(output_path, media_type="audio/wav")
+    return FileResponse(output_path, media_type="audio/mpeg")
 
 COMPANION_URL = "http://127.0.0.1:8000"
 LLM_URL = "http://localhost:8001"
@@ -131,9 +131,9 @@ async def full_pipeline(file: UploadFile = File(...)):
     print(f" LLM response: {llm_response}")
 
     # Step 3: speak the response
-    output_path = "pipeline_response.wav"
+    output_path = "pipeline_response.mp3"
     speak(llm_response, output_path)
-    return FileResponse(output_path, media_type="audio/wav")
+    return FileResponse(output_path, media_type="audio/mpeg")
 
 @app.post("/wake-word/start")
 def start_wake_word():

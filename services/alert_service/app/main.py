@@ -132,7 +132,7 @@ async def handle_alert(event: AlertEvent):
     # Email — caregivers and admins fetched from the database only
     email_recipients = [
         r["email"] for r in recipients
-        if r.get("email") and r["role"] in {UserRole.caregiver, UserRole.admin}
+        if r.get("email") and r["role"] == UserRole.caregiver
     ]
     if not email_recipients:
         logger.warning("No email recipients found in database for %s", event.user_id)

@@ -2,19 +2,18 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { Send, Volume2, Loader2, RefreshCw, Bot, AlertTriangle, Info, Mic, MicOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useLocation } from 'react-router-dom'
 
 const MODES = [
   {
     key: 'chat',
     icon: <Send size={13}/>,
     label: 'Chat + Voix (LLM)',
-    desc: 'Léa lit votre message, génère une réponse intelligente avec l\'IA et vous la lit à voix haute.',
   },
   {
     key: 'speak',
     icon: <Volume2 size={13}/>,
     label: 'TTS seulement',
-    desc: 'Votre texte est simplement lu à voix haute sans réponse IA. Utile pour tester la synthèse vocale.',
   },
 ]
 
@@ -30,6 +29,7 @@ const WAKE_WORDS = ['bonjour léa', 'bonjour lea', 'bonjour la', 'bonjour']
 
 export default function VoicePage() {
   const { user } = useAuth()
+  const { state: locationState } = useLocation()
   const [text, setText] = useState('')
   const [speed, setSpeed] = useState(1.0)
   const [loading, setLoading] = useState(false)
@@ -365,6 +365,37 @@ export default function VoicePage() {
     wakeRecognitionRef.current?.stop()
   }, [])
 
+  // Auto-start for elderly users on page mount ─────────────────────────────
+  // If navigated from ElderlyHome after wake-word detection (autoStart: true):
+  //   skip wake-word step, go straight into conversation mode.
+  // Otherwise, if the user is elderly with consent: silently start wake-word
+  //   detection so they don't have to press the button.
+  const autoStartDone = useRef(false)
+  useEffect(() => {
+    if (autoStartDone.current || !hasSpeech || !user) return
+    autoStartDone.current = true
+
+    if (locationState?.autoStart) {
+      // Wake word was already detected in ElderlyHome — jump to conversation
+      continuousVoiceRef.current = true
+      setContinuousVoice(true)
+      const ack = 'Oui, je vous écoute. Que souhaitez-vous ?'
+      setHistory(h => [...h, { role: 'lea', text: ack }])
+      axios.post('http://127.0.0.1:8002/speak', { text: ack, speed: 1.0 }, { responseType: 'blob', timeout: 10000 })
+        .then(r => {
+          const audio = new Audio(URL.createObjectURL(r.data))
+          audio.onended = () => setTimeout(() => startMicAutoSubmitRef.current?.(), 300)
+          audio.play().catch(() => setTimeout(() => startMicAutoSubmitRef.current?.(), 500))
+        })
+        .catch(() => setTimeout(() => startMicAutoSubmitRef.current?.(), 500))
+    } else if (user.role === 'elderly') {
+      // Elderly user opened VoicePage normally — auto-start wake word
+      wakeIntendedRef.current = true
+      setWakeActive(true)
+      createWakeRecognition()
+    }
+  }, [user, hasSpeech, locationState, createWakeRecognition])
+
   // ── Chat submit ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!text.trim() || loading) return
@@ -411,7 +442,7 @@ export default function VoicePage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-4xl mx-auto">
       <div className="mb-8 animate-fade-up">
         <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>Léa — Assistante Vocale</h1>
         <p className="text-sm" style={{ color: 'var(--text2)' }}>
@@ -698,7 +729,7 @@ export default function VoicePage() {
                   border: `1px solid ${wakeActive ? 'rgba(185,28,28,0.2)' : 'rgba(30,107,46,0.2)'}`,
                   color: wakeActive ? 'var(--danger)' : 'var(--green)',
                 }}>
-                {wakeActive ? 'Désactiver l\'écoute' : 'Activer l\'écoute continue'}
+                {wakeActive ? 'Désactiver l\'écoute' : 'Activer l\'écoute'}
               </button>
             )}
           </div>

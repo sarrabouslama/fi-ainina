@@ -85,7 +85,10 @@ def analyze_emotion(face_region) -> EmotionAnalysisResult:
         emotion_map = analysis.get("emotion", {}) or {}
         dominant_emotion = str(analysis.get("dominant_emotion", "neutral")).lower()
         confidence = _normalize_confidence(float(emotion_map.get(dominant_emotion, 0.0) or 0.0))
-        if confidence < EMOTION_CONFIDENCE_THRESHOLD:
+        # Elderly faces often produce softer DeepFace scores, so cap the effective
+        # cutoff to keep clear non-neutral signals from being flattened back to neutral.
+        effective_threshold = min(EMOTION_CONFIDENCE_THRESHOLD, 0.20)
+        if confidence < effective_threshold:
             return EmotionAnalysisResult(emotion="neutral", confidence=0.0, severity=None)
 
         severity = _emotion_severity(dominant_emotion, confidence)

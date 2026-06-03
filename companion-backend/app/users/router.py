@@ -71,6 +71,19 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     return [to_response(u) for u in users]
 
 
+@router.get('/me/patients', response_model=list[UserResponse])
+async def list_my_patients(current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Return the elderly users linked to the current caregiver via person_watchers."""
+    if current.role != UserRole.caregiver:
+        raise HTTPException(status_code=403, detail='Only caregivers can access this endpoint')
+    patients = (await db.execute(
+        select(User)
+        .join(PersonWatcher, PersonWatcher.person_id == User.id)
+        .where(PersonWatcher.user_id == current.id, User.role == UserRole.elderly)
+    )).scalars().all()
+    return [to_response(u) for u in patients]
+
+
 @router.get('/{user_id}', response_model=UserResponse)
 async def get_user(user_id: str, _: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
@@ -268,8 +281,8 @@ async def change_password(user_id: str, payload: PasswordChange, current: User =
 
 @router.post('/{user_id}/consent', response_model=UserResponse)
 async def update_consent(user_id: str, payload: ConsentUpdate, current: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if current.role != UserRole.admin and current.id != user_id:
-        raise HTTPException(status_code=403, detail='Forbidden')
+    if current.id != user_id:
+        raise HTTPException(status_code=403, detail='Only the user themselves can update their consent')
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail='Not found')

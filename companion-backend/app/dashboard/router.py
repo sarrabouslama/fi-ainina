@@ -8,7 +8,7 @@ from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.enums import UserRole
 from app.main_state import health_state
-from app.models import Alert, ConversationSession, Review, ReviewMessage, User
+from app.models import Alert, ConversationSession, PersonWatcher, Review, ReviewMessage, User
 
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
@@ -67,11 +67,11 @@ async def _resolve_scope_user_ids(current: User, db: AsyncSession) -> list[str]:
         return []
     if current.role == UserRole.elderly:
         return [current.id]
-    preferences = current.preferences or {}
-    assigned = preferences.get('assigned_user_ids') or []
-    if assigned:
-        return list(assigned)
-    return [current.id]
+    # Caregiver: return the elderly users linked via person_watchers
+    rows = (await db.execute(
+        select(PersonWatcher.person_id).where(PersonWatcher.user_id == current.id)
+    )).scalars().all()
+    return list(rows) if rows else []
 
 
 async def _count_alerts(

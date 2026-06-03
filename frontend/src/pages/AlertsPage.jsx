@@ -13,7 +13,7 @@ export default function AlertsPage({ alerts, onResolveAlert }) {
   ]
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-4xl mx-auto">
       <div className="mb-8 animate-fade-up">
         <h1 className="font-display text-3xl font-bold text-white mb-1">Alertes & Événements</h1>
         <p className="text-sm" style={{ color: 'var(--text2)' }}>

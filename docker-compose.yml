@@ -220,8 +220,7 @@ services:
       - .env
       - ./services/alert_service/.env
     environment:
-      # Override .env mismatches so the service connects to the shared postgres
-      - DATABASE_URL=postgresql://postgres_user:fiainina2024@postgres:5432/fi_ainina
+      - DATABASE_URL=postgresql://postgres:admin@postgres:5432/fiainina
       - REDIS_URL=redis://redis:6379/0
       - ALERT_REDIS_CHANNELS=emotion_events,fall_events
       - ENABLE_SMS=true

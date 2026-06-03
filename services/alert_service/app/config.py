@@ -29,7 +29,7 @@ def _env_list(name: str) -> list[str]:
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 ALERT_REDIS_CHANNELS = _env_list("ALERT_REDIS_CHANNELS") or [
     "emotion_events",
-    "fall_alerts",
+    "fall_events",
 ]
 
 # PostgreSQL (for alert_log and user lookups)

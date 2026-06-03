@@ -28,8 +28,13 @@ _frame_lock = threading.Lock()
 def _largest_face_bbox(frame) -> Optional[Tuple[int, int, int, int]]:
     """Return the largest detected face bounding box in the frame."""
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Equalize histogram to improve detection under uneven lighting
+    gray_frame = cv2.equalizeHist(gray_frame)
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
+    if len(faces) == 0:
+        # Retry with more relaxed params — elderly faces with wrinkles/glasses are often missed
+        faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.05, minNeighbors=1, minSize=(20, 20))
     if len(faces) == 0:
         return None
     return max(faces, key=lambda box: box[2] * box[3])
@@ -79,8 +84,8 @@ def _capture_loop() -> None:
                 try:
                     bbox = _largest_face_bbox(frame)
                     face_region = _crop_face(frame, bbox) if bbox is not None else None
-                    # If Haar cascade misses the face, pass the full frame to
-                    # DeepFace (enforce_detection=False lets it search internally)
+                    # Emotion can still try the full frame if face detection fails,
+                    # but redness must stay limited to the detected face crop.
                     emotion_result = analyze_emotion(face_region if face_region is not None else frame)
                     redness_result = analyze_redness(face_region)
                     inactivity_result = inactivity_timer.update(frame)
