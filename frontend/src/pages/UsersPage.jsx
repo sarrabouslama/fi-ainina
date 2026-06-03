@@ -1,8 +1,75 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { UserPlus, Trash2, Shield, Loader2, ChevronDown, ChevronUp, UserCheck, X, Plus } from 'lucide-react'
+
+const EMPTY_CARER_FORM_LOCAL = { email: '', password: '', full_name: '', phone: '' }
+
+function CarerForm({ elderlyId, API, onSuccess, onCancel }) {
+  const [form, setForm]       = useState(EMPTY_CARER_FORM_LOCAL)
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await axios.post(`${API}/users/${elderlyId}/caregivers`, form)
+      onSuccess()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de la création')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}
+      className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl"
+      style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.12)' }}>
+      <div>
+        <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Nom complet</label>
+        <input className="input-field" value={form.full_name}
+          onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} required />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Email</label>
+        <input type="email" className="input-field" value={form.email}
+          onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Mot de passe</label>
+        <input type="password" className="input-field" value={form.password}
+          onChange={e => setForm(p => ({ ...p, password: e.target.value }))} required />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Téléphone (WhatsApp)</label>
+        <input className="input-field" value={form.phone}
+          onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+216..." />
+      </div>
+      {error && (
+        <div className="col-span-2 px-3 py-2 rounded-lg text-xs"
+          style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+      <div className="col-span-2 flex gap-2">
+        <button type="submit" disabled={saving}
+          className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2"
+          style={{ background: '#60a5fa', color: '#fff', opacity: saving ? 0.7 : 1 }}>
+          {saving ? <><Loader2 size={12} className="animate-spin" /> Création...</> : 'Créer le soignant'}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="px-4 py-2 rounded-xl text-xs font-semibold transition-all"
+          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171' }}>
+          Annuler
+        </button>
+      </div>
+    </form>
+  )
+}
 
 const ROLE_CONFIG = {
   elderly:   { label: 'Personne âgée',  color: '#78c98e' },
@@ -10,8 +77,7 @@ const ROLE_CONFIG = {
   admin:     { label: 'Administrateur', color: '#c9a84c' },
 }
 
-const EMPTY_USER_FORM   = { email: '', password: '', full_name: '', phone: '', role: 'elderly' }
-const EMPTY_CARER_FORM  = { email: '', password: '', full_name: '', phone: '' }
+const EMPTY_USER_FORM = { email: '', password: '', full_name: '', phone: '', role: 'elderly' }
 
 export default function UsersPage() {
   const { user: me, API } = useAuth()
@@ -28,9 +94,6 @@ export default function UsersPage() {
   const [elderlyCarers, setElderlyCarers]     = useState({})
   // Per-elderly: show/hide add-caregiver inline form
   const [showCarerForm, setShowCarerForm]     = useState(null)
-  const [carerForm, setCarerForm]             = useState(EMPTY_CARER_FORM)
-  const [carerCreating, setCarerCreating]     = useState(false)
-  const [carerError, setCarerError]           = useState('')
 
   const navigate = useNavigate()
   const isAdmin = me?.role === 'admin'
@@ -65,8 +128,6 @@ export default function UsersPage() {
     } else {
       setExpandedElderly(elderlyId)
       setShowCarerForm(null)
-      setCarerForm(EMPTY_CARER_FORM)
-      setCarerError('')
       await fetchCarers(elderlyId)
     }
   }
@@ -85,24 +146,6 @@ export default function UsersPage() {
       setFormError(err.response?.data?.detail || 'Erreur lors de la création')
     } finally {
       setCreating(false)
-    }
-  }
-
-  // Create a caregiver linked to an elderly person
-  const handleCreateCarer = async (e, elderlyId) => {
-    e.preventDefault()
-    setCarerCreating(true)
-    setCarerError('')
-    try {
-      await axios.post(`${API}/users/${elderlyId}/caregivers`, carerForm)
-      setShowCarerForm(null)
-      setCarerForm(EMPTY_CARER_FORM)
-      await fetchCarers(elderlyId)
-      fetchUsers()
-    } catch (err) {
-      setCarerError(err.response?.data?.detail || 'Erreur lors de la création')
-    } finally {
-      setCarerCreating(false)
     }
   }
 
@@ -151,7 +194,7 @@ export default function UsersPage() {
   )
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-5xl mx-auto">
 
       {/* Page header */}
       <div className="flex items-center justify-between mb-8 animate-fade-up">
@@ -265,8 +308,8 @@ export default function UsersPage() {
                     const cfg = ROLE_CONFIG.elderly
 
                     return (
-                      <>
-                        <tr key={u.id} className="animate-fade-up" style={{ animationDelay: `${i * 0.04}s` }}>
+                      <Fragment key={u.id}>
+                        <tr className="animate-fade-up" style={{ animationDelay: `${i * 0.04}s` }}>
                           <td>
                             <button onClick={() => navigate(`/profile/${u.id}`)}
                               className="flex items-center gap-3 text-left w-full transition-all"
@@ -283,21 +326,14 @@ export default function UsersPage() {
                             </button>
                           </td>
                           <td>
-                            {isAdmin ? (
-                              <button onClick={() => handleConsent(u.id, !u.consent_given)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
-                                style={{
-                                  background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                  color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
-                                  border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                                }}>
-                                {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                              </button>
-                            ) : (
-                              <span style={{ color: u.consent_given ? 'var(--ok)' : 'var(--danger)', fontSize: 12 }}>
-                                {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                              </span>
-                            )}
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                              style={{
+                                background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
+                                border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                              }}>
+                              {u.consent_given ? '✓ Donné' : '✗ Refusé'}
+                            </span>
                           </td>
                           <td>
                             <button onClick={() => toggleElderlyPanel(u.id)}
@@ -361,45 +397,14 @@ export default function UsersPage() {
                                   )}
                                 </div>
 
-                                {/* Inline create-caregiver form */}
+                                {/* Inline create-caregiver form — own component so typing doesn't re-render the table */}
                                 {isAdmin && showCarerForm === u.id && (
-                                  <form onSubmit={e => handleCreateCarer(e, u.id)}
-                                    className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl"
-                                    style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.12)' }}>
-                                    <div>
-                                      <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Nom complet</label>
-                                      <input className="input-field" value={carerForm.full_name}
-                                        onChange={e => setCarerForm(p => ({ ...p, full_name: e.target.value }))} required />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Email</label>
-                                      <input type="email" className="input-field" value={carerForm.email}
-                                        onChange={e => setCarerForm(p => ({ ...p, email: e.target.value }))} required />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Mot de passe</label>
-                                      <input type="password" className="input-field" value={carerForm.password}
-                                        onChange={e => setCarerForm(p => ({ ...p, password: e.target.value }))} required />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-semibold mb-1 uppercase tracking-wider" style={{ color: 'var(--text2)' }}>Téléphone (WhatsApp)</label>
-                                      <input className="input-field" value={carerForm.phone}
-                                        onChange={e => setCarerForm(p => ({ ...p, phone: e.target.value }))} placeholder="+216..." />
-                                    </div>
-                                    {carerError && (
-                                      <div className="col-span-2 px-3 py-2 rounded-lg text-xs"
-                                        style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
-                                        {carerError}
-                                      </div>
-                                    )}
-                                    <div className="col-span-2">
-                                      <button type="submit" disabled={carerCreating}
-                                        className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2"
-                                        style={{ background: '#60a5fa', color: '#fff', opacity: carerCreating ? 0.7 : 1 }}>
-                                        {carerCreating ? <><Loader2 size={12} className="animate-spin" /> Création...</> : 'Créer le soignant'}
-                                      </button>
-                                    </div>
-                                  </form>
+                                  <CarerForm
+                                    elderlyId={u.id}
+                                    API={API}
+                                    onSuccess={async () => { setShowCarerForm(null); await fetchCarers(u.id); fetchUsers() }}
+                                    onCancel={() => setShowCarerForm(null)}
+                                  />
                                 )}
 
                                 {/* Caregivers list */}
@@ -446,7 +451,7 @@ export default function UsersPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })}
                 </tbody>
@@ -557,21 +562,14 @@ export default function UsersPage() {
                             <span className="text-xs" style={{ color: 'var(--muted)' }}>{u.phone || '—'}</span>
                           </td>
                           <td>
-                            {isAdmin ? (
-                              <button onClick={() => handleConsent(u.id, !u.consent_given)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
-                                style={{
-                                  background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                  color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
-                                  border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                                }}>
-                                {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                              </button>
-                            ) : (
-                              <span style={{ color: u.consent_given ? 'var(--ok)' : 'var(--danger)', fontSize: 12 }}>
-                                {u.consent_given ? '✓ Donné' : '✗ Refusé'}
-                              </span>
-                            )}
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                              style={{
+                                background: u.consent_given ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                color: u.consent_given ? 'var(--ok)' : 'var(--danger)',
+                                border: `1px solid ${u.consent_given ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                              }}>
+                              {u.consent_given ? '✓ Donné' : '✗ Refusé'}
+                            </span>
                           </td>
                           {isAdmin && (
                             <td>

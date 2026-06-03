@@ -33,9 +33,12 @@ def parse_alert_event(data: str) -> AlertEvent:
     if not isinstance(metadata, dict):
         metadata = {"value": metadata}
 
+    # Some publishers use `person_id` while others use `user_id` — accept both.
+    user_id = event_dict.get("user_id") or event_dict.get("person_id") or None
+
     return AlertEvent(
         event_type=event_dict.get("event_type"),
-        user_id=event_dict.get("user_id"),
+        user_id=user_id,
         timestamp=event_dict.get("timestamp"),
         severity=event_dict.get("severity"),
         confidence=event_dict.get("confidence"),

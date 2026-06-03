@@ -45,7 +45,8 @@ const EMOTION_COLORS = {
 // ─── Live emotion data panel ──────────────────────────────────────────────────
 function EmotionData({ status }) {
   if (!status) return null
-  const redness = status.redness_level || 'none'
+  const redness = (status.redness_level || 'normal').toLowerCase()
+  const rednessLabel = redness === 'high' ? 'Élevée' : redness === 'mild' ? 'Légère' : 'Normale'
   return (
     <div className="grid grid-cols-3 gap-2 mt-3">
       <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(45,120,45,0.1)' }}>
@@ -60,7 +61,7 @@ function EmotionData({ status }) {
       <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(45,120,45,0.1)' }}>
         <p className="text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Rougeur</p>
         <p className="font-bold text-base" style={{ color: redness === 'high' ? '#dc2626' : redness === 'mild' ? '#f59e0b' : 'var(--ok)' }}>
-          {redness === 'none' ? 'Normale' : redness === 'mild' ? 'Légère' : 'Élevée'}
+          {rednessLabel}
         </p>
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
           {status.redness_score != null ? `score ${status.redness_score.toFixed(2)}` : ''}
@@ -111,10 +112,18 @@ function FallData({ status, onReset, isAdmin }) {
 function CameraCard({ svcKey, active, onActivate, onStop, loading, serviceOnline, statusData, isAdmin }) {
   const svc = SVC[svcKey]
   const Icon = svc.icon
-  const [feedOk, setFeedOk] = useState(false)
+  const [feedError, setFeedError] = useState(false)
+  const [feedReady, setFeedReady] = useState(false) // true after brief warm-up delay
 
-  // Reset feed state when activation changes
-  useEffect(() => { if (!active) setFeedOk(false) }, [active])
+  // When activated, give the MJPEG stream ~1.5s to start delivering frames
+  // (onLoad never fires for multipart/x-mixed-replace streams in Chrome)
+  useEffect(() => {
+    if (!active) { setFeedError(false); setFeedReady(false); return }
+    setFeedError(false)
+    setFeedReady(false)
+    const t = setTimeout(() => setFeedReady(true), 1500)
+    return () => clearTimeout(t)
+  }, [active])
 
   const resetFall = async () => {
     try { await axios.post(svc.resetUrl, {}, { timeout: 3000 }) } catch {}
@@ -136,7 +145,7 @@ function CameraCard({ svcKey, active, onActivate, onStop, loading, serviceOnline
             <p className="font-display font-bold text-sm" style={{ color: active ? svc.color : 'var(--text)' }}>
               {svc.label}
             </p>
-            {active && feedOk && (
+            {active && feedReady && !feedError && (
               <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
                 style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -180,19 +189,28 @@ function CameraCard({ svcKey, active, onActivate, onStop, loading, serviceOnline
       <div style={{ background: '#0a0a0a', minHeight: active ? 280 : 80, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'min-height 0.3s ease' }}>
         {active ? (
           <>
-            <img
-              src={svc.feedUrl}
-              alt={svc.label}
-              onLoad={() => setFeedOk(true)}
-              onError={() => setFeedOk(false)}
-              style={{ maxWidth: '100%', maxHeight: 420, display: feedOk ? 'block' : 'none', margin: '0 auto' }}
-            />
-            {!feedOk && (
-              <div className="flex flex-col items-center gap-2 py-8">
+            {/* Show warm-up message for the first 1.5s, then show the MJPEG stream.
+                onLoad never fires for multipart/x-mixed-replace in Chrome, so we
+                use a simple timer instead of relying on the load event. */}
+            {!feedReady && !feedError && (
+              <div className="flex flex-col items-center gap-2 py-8" style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <WifiOff size={22} style={{ color: '#444' }} />
                 <p className="text-xs" style={{ color: '#555' }}>Connexion au flux vidéo...</p>
                 <p className="text-xs" style={{ color: '#444' }}>port {svc.port}/video_feed</p>
               </div>
+            )}
+            {feedError ? (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <WifiOff size={22} style={{ color: '#dc2626' }} />
+                <p className="text-xs" style={{ color: '#dc2626' }}>Flux vidéo indisponible</p>
+              </div>
+            ) : (
+              <img
+                src={svc.feedUrl}
+                alt={svc.label}
+                onError={() => setFeedError(true)}
+                style={{ maxWidth: '100%', maxHeight: 420, display: feedReady ? 'block' : 'none', margin: '0 auto' }}
+              />
             )}
           </>
         ) : (
@@ -237,7 +255,7 @@ function AlertTestPanel({ lastAlert }) {
     } finally { setSending(null) }
   }
 
-  return (
+  /* return (
     <div className="glass rounded-2xl p-5 animate-fade-up">
       <div className="flex items-center gap-2 mb-4">
         <Zap size={15} style={{ color: '#f59e0b' }} />
@@ -281,7 +299,7 @@ function AlertTestPanel({ lastAlert }) {
         </div>
       )}
     </div>
-  )
+  ) */
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────

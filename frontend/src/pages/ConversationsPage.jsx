@@ -55,7 +55,7 @@ export default function ConversationsPage() {
     : null
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-8 animate-fade-up">
         <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>
           Historique Conversations

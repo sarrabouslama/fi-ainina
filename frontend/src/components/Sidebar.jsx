@@ -3,13 +3,13 @@ import { useAuth } from '../context/AuthContext'
 import { LayoutDashboard, Mic, Bell, Activity, Users, MessageSquare, LogOut, Star } from 'lucide-react'
 
 const NAV = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
-  { path: '/voice', icon: Mic, label: 'Léa — Voix' },
-  { path: '/alerts', icon: Bell, label: 'Alertes' },
-  { path: '/monitoring', icon: Activity, label: 'Surveillance' },
-  { path: '/conversations', icon: MessageSquare, label: 'Conversations' },
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord', allowedRoles: ['admin', 'caregiver'] },
+  { path: '/voice', icon: Mic, label: 'Léa — Voix', allowedRoles: ['elderly'] },
+  { path: '/alerts', icon: Bell, label: 'Alertes', allowedRoles: ['caregiver'] },
+  { path: '/monitoring', icon: Activity, label: 'Surveillance', allowedRoles: ['admin', 'caregiver', 'elderly'] },
+  { path: '/conversations', icon: MessageSquare, label: 'Conversations', allowedRoles: ['caregiver', 'elderly'] },
   { path: '/users', icon: Users, label: 'Utilisateurs', adminOnly: true },
-  { path: '/reviews', icon: Star, label: 'Revues' },
+  { path: '/reviews', icon: Star, label: 'Revues', allowedRoles: ['admin', 'caregiver'] },
 ]
 
 export default function Sidebar({ wsConnected }) {
@@ -18,7 +18,11 @@ export default function Sidebar({ wsConnected }) {
   const navigate = useNavigate()
 
   const handleLogout = async () => { await logout(); navigate('/login') }
-  const visibleNav = NAV.filter(n => !n.adminOnly || user?.role === 'admin')
+  const visibleNav = NAV.filter(n => {
+    if (n.adminOnly && user?.role !== 'admin') return false
+    if (n.allowedRoles && !n.allowedRoles.includes(user?.role)) return false
+    return true
+  })
   const ROLE_COLORS = { admin: '#c9a84c', caregiver: '#60a5fa', elderly: '#78c98e', family: '#f9a8d4' }
   const roleColor = ROLE_COLORS[user?.role] || 'var(--muted)'
 

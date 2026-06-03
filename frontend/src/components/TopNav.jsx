@@ -8,21 +8,15 @@ const NAV_BY_ROLE = {
     { path: '/voice',         icon: Mic,           label: 'Léa' },
     { path: '/monitoring',    icon: Activity,      label: 'Ma surveillance' },
     { path: '/conversations', icon: MessageSquare, label: 'Conversations' },
-    { path: '/reviews',       icon: Star,          label: 'Revues' },
   ],
   caregiver: [
     { path: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
     { path: '/alerts',        icon: Bell,            label: 'Alertes' },
-    { path: '/monitoring',    icon: Activity,        label: 'Surveillance' },
-    { path: '/conversations', icon: MessageSquare,   label: 'Conversations' },
     { path: '/reviews',       icon: Star,            label: 'Revues' },
   ],
   admin: [
     { path: '/dashboard',     icon: LayoutDashboard, label: 'Tableau de bord' },
-    { path: '/alerts',        icon: Bell,            label: 'Alertes' },
     { path: '/users',         icon: Users,           label: 'Utilisateurs' },
-    { path: '/monitoring',    icon: Activity,        label: 'Surveillance' },
-    { path: '/conversations', icon: MessageSquare,   label: 'Conversations' },
     { path: '/reviews',       icon: Star,            label: 'Revues' },
   ],
 }

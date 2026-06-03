@@ -37,7 +37,9 @@ function AppLayout({ children, wsConnected }) {
     <div className="min-h-screen">
       <TopNav wsConnected={wsConnected} />
       <main className="min-h-screen overflow-y-auto" style={{ paddingTop: '72px' }}>
-        {children}
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+          {children}
+        </div>
       </main>
     </div>
   )
@@ -95,16 +97,16 @@ function InnerApp() {
   // ── In-app toast + browser notification for new emergency alerts ──────────
   const [toast, setToast] = useState(null)
   const prevCountRef = useRef(0)
-  const isStaff = user?.role === 'admin' || user?.role === 'caregiver'
+  const isCaregiver = user?.role === 'caregiver'
 
   useEffect(() => {
-    if (!isStaff) return
+    if (!isCaregiver) return
     // Request browser notification permission once
     if (Notification.permission === 'default') Notification.requestPermission()
-  }, [isStaff])
+  }, [isCaregiver])
 
   useEffect(() => {
-    if (!isStaff || allAlerts.length === 0) return
+    if (!isCaregiver || allAlerts.length === 0) return
     if (allAlerts.length <= prevCountRef.current) { prevCountRef.current = allAlerts.length; return }
 
     const newest = allAlerts[0]
@@ -121,7 +123,7 @@ function InnerApp() {
         new Notification('🚨 في عينينا — Urgence', { body: msg, icon: '/logo.png' })
       }
     }
-  }, [allAlerts.length, isStaff])
+  }, [allAlerts.length, isCaregiver])
 
 
   return (
@@ -177,21 +179,21 @@ function InnerApp() {
 
       {/* Alerts — admin & caregiver */}
       <Route path="/alerts" element={
-        <RequireAuth roles={['admin', 'caregiver']}>
+        <RequireAuth roles={['caregiver']}>
           <AppLayout wsConnected={wsConnected}><AlertsPage alerts={allAlerts} onResolveAlert={refreshAlerts} /></AppLayout>
         </RequireAuth>
       } />
 
-      {/* Monitoring — all roles, content differs per role */}
+      {/* Monitoring — all staff + elderly */}
       <Route path="/monitoring" element={
         <RequireAuth roles={['admin', 'caregiver', 'elderly']}>
           <AppLayout wsConnected={wsConnected}><MonitoringPage /></AppLayout>
         </RequireAuth>
       } />
 
-      {/* Conversations — all roles, filtered by role in component */}
+      {/* Conversations — caregiver & elderly (admin removed) */}
       <Route path="/conversations" element={
-        <RequireAuth>
+        <RequireAuth roles={['caregiver', 'elderly']}>
           <AppLayout wsConnected={wsConnected}><ConversationsPage /></AppLayout>
         </RequireAuth>
       } />
@@ -203,9 +205,9 @@ function InnerApp() {
         </RequireAuth>
       } />
 
-      {/* Reviews — all roles */}
+      {/* Reviews — admin & caregiver (elderly removed) */}
       <Route path="/reviews" element={
-        <RequireAuth>
+        <RequireAuth roles={['admin', 'caregiver']}>
           <AppLayout wsConnected={wsConnected}><ReviewsPage /></AppLayout>
         </RequireAuth>
       } />

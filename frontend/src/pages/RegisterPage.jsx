@@ -27,7 +27,8 @@ export default function RegisterPage() {
     setLoading(true)
     setError('')
     try {
-      await axios.post(`${API}/auth/register`, form)
+      const payload = { ...form, consent_given: form.role === 'elderly' ? false : form.consent_given }
+      await axios.post(`${API}/auth/register`, payload)
       navigate('/login', { state: { registered: true } })
     } catch (err) {
       if (err.response?.status === 409) setError('Un compte avec cet email existe déjà.')
@@ -117,8 +118,8 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* RGPD Consent */}
-            <label className="flex items-start gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
+            {/* RGPD Consent — hidden for elderly (they consent themselves at first login) */}
+            {form.role !== 'elderly' && <label className="flex items-start gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
               style={{
                 background: form.consent_given ? 'rgba(30,107,46,0.08)' : 'rgba(255,255,255,0.5)',
                 border: `1px solid ${form.consent_given ? 'rgba(30,107,46,0.25)' : 'rgba(45,120,45,0.12)'}`,
@@ -138,7 +139,17 @@ export default function RegisterPage() {
                   J'accepte que mes données (conversations, alertes, surveillance) soient collectées et traitées à des fins d'assistance et de sécurité, conformément au RGPD.
                 </p>
               </div>
-            </label>
+            </label>}
+
+            {form.role === 'elderly' && (
+              <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-xs"
+                style={{ background: 'rgba(30,107,46,0.06)', border: '1px solid rgba(30,107,46,0.12)' }}>
+                <span style={{ color: 'var(--green)', marginTop: 1 }}>ℹ</span>
+                <span style={{ color: 'var(--muted)' }}>
+                  Le consentement sera demandé directement à la personne âgée lors de sa première connexion.
+                </span>
+              </div>
+            )}
 
             {error && (
               <div className="px-4 py-3 rounded-xl text-sm"

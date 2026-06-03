@@ -58,7 +58,7 @@ export default function ReviewsPage() {
   const TYPE_LABELS = { general: 'Général', alert_review: 'Alerte', feedback: 'Feedback', support: 'Support' }
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8 animate-fade-up">
         <div>
           <h1 className="font-display text-3xl font-bold mb-1" style={{ color: 'var(--text)' }}>Revues & Feedback</h1>

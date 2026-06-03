@@ -11,6 +11,9 @@ from app.database import get_db
 from app.enums import UserRole
 from app.events.manager import manager
 from app.models import Alert, User
+import json
+import os
+from app.database import redis_client
 
 
 router = APIRouter(prefix='/alerts', tags=['alerts'])
@@ -95,6 +98,25 @@ async def receive_fall_alert(payload: FallAlertPayload, db: AsyncSession = Depen
             'alert_id': alert_id,
         }
     })
+    # Also publish to Redis so alert_service can consume and notify caregivers
+    try:
+        channel = os.getenv('REDIS_CHANNEL_FALL', 'fall_events')
+        redis_payload = {
+            'event_type': payload.event_type,
+            'user_id': elderly.id if elderly else None,
+            'timestamp': now.isoformat(),
+            'severity': severity,
+            'confidence': None,
+            'metadata': {
+                'person_status': payload.person_status,
+                'response_text': payload.response_text,
+                'message_for_family': enriched_message,
+            }
+        }
+        await redis_client.publish(channel, json.dumps(redis_payload))
+    except Exception:
+        # Non-fatal: alert already saved & broadcasted; log silently
+        pass
     return {'ok': True, 'alert_id': alert_id}
 
 
