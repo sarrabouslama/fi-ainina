@@ -71,35 +71,56 @@ Services communicate via Redis Pub/Sub. **Do not change these channel names with
 
 ## Emotion Service Test Commands
 
-Run the live camera preview from the project virtualenv:
+All commands run from `services/emotion_service` with the project virtualenv active.
+
+**1. Activate the virtualenv** (from the repo root; create it first with `python -m venv .venv` if you don't have one):
 
 ```powershell
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+**2. Move into the service folder:**
+
+```bash
 cd services/emotion_service
-& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' camera_preview.py
+```
+
+**3. Run the tests:**
+
+Live camera preview:
+
+```bash
+python camera_preview.py
 ```
 
 Test a still image:
 
-```powershell
-& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/test_media.py --image path\to\face.jpg
+```bash
+python scripts/test_media.py --image path/to/face.jpg
 ```
 
 Test a video file:
 
-```powershell
-& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/test_media.py --video path\to\video.mp4
+```bash
+python scripts/test_media.py --video path/to/video.mp4
 ```
 
 Watch Redis alerts while the service runs:
 
-```powershell
-& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/redis_alert_listener.py
+```bash
+python scripts/redis_alert_listener.py
 ```
 
 Check Redis pub/sub round-trip directly:
 
-```powershell
-& 'C:\Users\UNICEF\Desktop\afc-doc\fi-ainina\.venv\Scripts\python.exe' scripts/check_redis_pubsub.py
+```bash
+python scripts/check_redis_pubsub.py
 ```
 
 ## Project Structure
